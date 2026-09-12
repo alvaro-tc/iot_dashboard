@@ -1,0 +1,10 @@
+# Generado por apps/api (broker-credentials.ts). No editar a mano.
+
+user iot-backend
+topic readwrite telemetry/#
+
+user esp32-alvaro01
+topic write telemetry/2/+
+
+user esp32-jorge001
+topic write telemetry/4/+

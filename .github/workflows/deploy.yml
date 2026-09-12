@@ -1,0 +1,58 @@
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency: deploy
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Typecheck de api, web y shared + autocomprobaciones.
+      - run: pnpm lint
+
+      - name: Build web
+        run: pnpm --filter @iot/web build
+        env:
+          VITE_API_URL: https://iot-dashboard.tumype.com
+          VITE_WS_URL: wss://iot-dashboard.tumype.com/ws
+
+      - name: Configurar SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      # Sube código + apps/web/dist. Lo excluido (.env, node_modules) no se borra en el servidor.
+      - name: Subir al VPS
+        run: >
+          rsync -az --delete
+          --exclude .git --exclude node_modules --exclude .env --exclude mosquitto
+          ./ deploy@${{ secrets.VPS_HOST }}:/srv/iot/
+
+      - name: Instalar dependencias y reiniciar API
+        run: |
+          ssh deploy@${{ secrets.VPS_HOST }} '
+            set -e
+            cd /srv/iot
+            CI=true pnpm install --frozen-lockfile
+            sudo systemctl restart iot-api
+            curl -fsS --retry 15 --retry-connrefused --retry-delay 2 http://localhost:4000/api/health
+          '

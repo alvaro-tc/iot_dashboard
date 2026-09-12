@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: iot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: iot
+      POSTGRES_PASSWORD: iot
+      POSTGRES_DB: iot
+    ports:
+      - "5433:5432" # 5433 en el host para no chocar con un Postgres local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  mosquitto:
+    image: eclipse-mosquitto:2
+    # El backend lo recarga con `docker kill -s HUP mosquitto`: el nombre debe coincidir con MOSQUITTO_CONTAINER.
+    container_name: mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      # passwd y acl los escribe el backend desde el host; Mosquitto los relee con SIGHUP.
+      - ./mosquitto:/mosquitto/config
+      - mosquitto-data:/mosquitto/data
+
+volumes:
+  pgdata:
+  mosquitto-data:
