@@ -10,8 +10,5 @@
   },
   "devDependencies": {
     "concurrently": "^9.2.1"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": ["bcrypt", "esbuild"]
   }
 }
