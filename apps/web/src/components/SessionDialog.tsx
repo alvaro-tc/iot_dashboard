@@ -1,6 +1,7 @@
 import { seriesByKey } from '@iot/shared';
 import { useMemo } from 'react';
 import { useLiveSamples } from '../hooks/useLiveSamples.ts';
+import { downloadCsv } from '../lib/csv.ts';
 import { seriesLabel } from '../lib/series-ui.ts';
 import { formatDateTime } from '../lib/time.ts';
 import type { Run, Sample } from '../lib/types.ts';
@@ -37,6 +38,22 @@ export function SessionDialog({
     <Dialog open={!!run} onClose={onClose} title={run ? `Sesión #${run.id}` : ''} xl>
       {run && (
         <>
+          <div className="mb-3 flex justify-end">
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={!samples.length}
+              onClick={() =>
+                downloadCsv(
+                  `sesion-${run.id}-${run.seriesKey}.csv`,
+                  ['iteracion', 'valor', 'error_absoluto', 'fecha'],
+                  samples.map((s) => [s.iteration, s.value, s.errorAbs, formatDateTime(s.createdAt)]),
+                )
+              }
+            >
+              Exportar CSV
+            </button>
+          </div>
           <dl className="panel mb-4 grid grid-cols-2 gap-x-6 gap-y-2 px-4 py-3 text-[13px] min-[900px]:grid-cols-4">
             {facts!.map(([label, value]) => (
               <div key={label as string}>
