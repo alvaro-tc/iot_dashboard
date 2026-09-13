@@ -2,6 +2,7 @@ import type { SeriesKey } from '@iot/shared';
 import { startOfDay } from 'date-fns';
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { LiveSessionDialog } from '../../components/SessionDialog.tsx';
 import { Elapsed, ErrorNote, LiveDot, PageHeader, SectionTitle } from '../../components/ui.tsx';
 import { api, errorMessage } from '../../lib/api.ts';
 import { useLiveEvents } from '../../lib/live.tsx';
@@ -28,6 +29,7 @@ interface Stats {
 export function Overview() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [error, setError] = useState('');
+  const [watching, setWatching] = useState<Stats['activeRuns'][number] | null>(null);
 
   const load = useCallback(() => {
     api<Stats>(`/api/admin/stats?since=${startOfDay(new Date()).toISOString()}`)
@@ -77,6 +79,9 @@ export function Overview() {
                     <th scope="col">Origen</th>
                     <th scope="col" className="num">Inicio</th>
                     <th scope="col" className="num">Transcurrido</th>
+                    <th scope="col">
+                      <span className="sr-only">Acciones</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -94,6 +99,11 @@ export function Overview() {
                       <td className="num">
                         <Elapsed from={r.startedAt} />
                       </td>
+                      <td className="text-right">
+                        <button type="button" className="btn btn-sm" onClick={() => setWatching(r)}>
+                          Ver en vivo
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -101,6 +111,9 @@ export function Overview() {
             </div>
           )}
         </>
+      )}
+      {watching && (
+        <LiveSessionDialog userId={watching.userId} runId={watching.runId} userName={watching.userName} onClose={() => setWatching(null)} />
       )}
     </>
   );

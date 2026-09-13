@@ -12,11 +12,14 @@ export function SamplesTable({
   runs,
   selectedRunId,
   fresh,
+  compact,
 }: {
   samples: Sample[];
   runs: Run[];
   selectedRunId: number | null;
   fresh: Set<number>;
+  /** Sin filtros ni columna de sesión: para el modal de una sola sesión. */
+  compact?: boolean;
 }) {
   const [seriesFilter, setSeriesFilter] = useState('');
   const [runFilter, setRunFilter] = useState('');
@@ -35,6 +38,9 @@ export function SamplesTable({
 
   return (
     <div>
+      {compact ? (
+        <p className="mb-2 font-mono text-[13px] text-ink-soft">{rows.length} muestras</p>
+      ) : (
       <div className="mb-3 flex flex-wrap items-end gap-3">
         <div>
           <label className="label" htmlFor="samples-series">
@@ -70,12 +76,13 @@ export function SamplesTable({
         </div>
         <p className="ml-auto font-mono text-[13px] text-ink-soft">{rows.length} muestras</p>
       </div>
+      )}
 
       <div className="panel overflow-x-auto">
         <table className="data-table">
           <thead>
             <tr>
-              <th scope="col">Sesión</th>
+              {!compact && <th scope="col">Sesión</th>}
               <th scope="col" className="num">Iteración</th>
               <th scope="col" className="num">Valor aproximado</th>
               <th scope="col" className="num">Valor real</th>
@@ -90,9 +97,11 @@ export function SamplesTable({
               const run = runById.get(s.runId);
               return (
                 <tr key={s.id} className={fresh.has(s.id) ? 'flash' : undefined}>
-                  <td className="whitespace-nowrap">
-                    <span className="font-mono">#{s.runId}</span> <span className="text-ink-soft">{run ? seriesLabel(run.seriesKey) : ''}</span>
-                  </td>
+                  {!compact && (
+                    <td className="whitespace-nowrap">
+                      <span className="font-mono">#{s.runId}</span> <span className="text-ink-soft">{run ? seriesLabel(run.seriesKey) : ''}</span>
+                    </td>
+                  )}
                   <td className="num">{s.iteration}</td>
                   <td className="num">
                     <Digits value={s.value} real={real} />
@@ -106,7 +115,7 @@ export function SamplesTable({
             })}
             {!visible.length && (
               <tr>
-                <td colSpan={7} className="py-6 text-ink-soft">
+                <td colSpan={compact ? 6 : 7} className="py-6 text-ink-soft">
                   No hay muestras con estos filtros.
                 </td>
               </tr>

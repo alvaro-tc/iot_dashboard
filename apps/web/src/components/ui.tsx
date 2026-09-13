@@ -123,12 +123,14 @@ export function Dialog({
   title,
   children,
   wide,
+  xl,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  xl?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -141,7 +143,7 @@ export function Dialog({
       ref={ref}
       onClose={onClose}
       aria-label={title}
-      className={`m-auto border border-grid bg-surface p-0 text-ink backdrop:bg-ink/30 ${wide ? 'w-[min(720px,calc(100vw-32px))]' : 'w-[min(480px,calc(100vw-32px))]'}`}
+      className={`m-auto border border-grid bg-surface p-0 text-ink backdrop:bg-ink/30 ${xl ? 'w-[min(1400px,calc(100vw-32px))]' : wide ? 'w-[min(720px,calc(100vw-32px))]' : 'w-[min(480px,calc(100vw-32px))]'}`}
     >
       {open && (
         <>
@@ -151,7 +153,7 @@ export function Dialog({
               ✕
             </button>
           </div>
-          <div className="max-h-[75vh] overflow-y-auto p-5">{children}</div>
+          <div className={`${xl ? 'max-h-[85vh]' : 'max-h-[75vh]'} overflow-y-auto p-5`}>{children}</div>
         </>
       )}
     </dialog>

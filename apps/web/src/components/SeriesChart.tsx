@@ -26,7 +26,7 @@ type Mode = 'value' | 'error';
  * Tarjeta de una serie. `samples` ya viene filtrado por sesión/rango y ordenado por sesión e iteración.
  * Sin sesión seleccionada se dibuja una línea por sesión, más clara cuanto más antigua.
  */
-export const SeriesChart = memo(function SeriesChart({ series, samples }: { series: Series; samples: Sample[] }) {
+export const SeriesChart = memo(function SeriesChart({ series, samples, chartClass = 'h-[220px]' }: { series: Series; samples: Sample[]; chartClass?: string }) {
   const [mode, setMode] = useState<Mode>('value');
   const reduced = usePrefersReducedMotion();
   const last = samples.at(-1);
@@ -85,7 +85,7 @@ export const SeriesChart = memo(function SeriesChart({ series, samples }: { seri
           <dd className="num">{last ? fmt.errorAbs(last.errorAbs) : <span className="text-muted">—</span>}</dd>
         </dl>
       </header>
-      <div className="graph-paper relative h-[220px]">
+      <div className={`graph-paper relative ${chartClass}`}>
         {empty ? (
           <p className="absolute inset-0 grid place-items-center text-[13px] text-muted">sin envíos</p>
         ) : (
