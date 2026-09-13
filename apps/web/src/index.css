@@ -1,0 +1,149 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-paper: #edf0f3;
+  --color-surface: #ffffff;
+  --color-grid: #d7dee4;
+  --color-ink: #16324f;
+  --color-ink-soft: #5e7186;
+  --color-signal: #1b9e77;
+  --color-deviation: #b3202c;
+  --color-muted: #8797a8; /* dígitos aún no convergidos, series sin datos */
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-weight: 500;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex h-9 cursor-pointer items-center gap-2 rounded-[4px] border border-grid bg-surface px-3.5 text-[15px] text-ink hover:border-ink-soft disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-primary {
+    @apply border-ink bg-ink text-white hover:border-ink hover:bg-[#0e2339];
+  }
+  .btn-danger {
+    @apply border-deviation/40 text-deviation hover:border-deviation;
+  }
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:border-grid;
+  }
+  .btn-sm {
+    @apply h-7 px-2.5 text-[13px];
+  }
+  .input {
+    @apply h-9 w-full rounded-[4px] border border-grid bg-surface px-3 text-[15px] text-ink placeholder:text-muted focus:border-ink aria-invalid:border-deviation;
+  }
+  .label {
+    @apply mb-1 block text-[13px] text-ink-soft;
+  }
+  .field-error {
+    @apply mt-1 text-[13px] text-deviation;
+  }
+  .panel {
+    @apply border border-grid bg-surface;
+  }
+  .data-table {
+    @apply w-full border-collapse text-[13px] leading-[1.4];
+  }
+  .data-table th {
+    @apply border-b border-grid px-3 py-2 text-left font-medium whitespace-nowrap text-ink-soft;
+  }
+  .data-table td {
+    @apply border-b border-grid px-3 py-2 align-middle;
+  }
+  .num {
+    @apply text-right font-mono whitespace-nowrap tabular-nums;
+  }
+  th.num {
+    @apply text-right font-sans;
+  }
+  .seg {
+    @apply h-7 cursor-pointer border border-grid bg-surface px-2.5 text-[13px] text-ink-soft first:rounded-l-[4px] last:rounded-r-[4px] not-first:-ml-px aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white;
+  }
+}
+
+/* Papel milimetrado: SOLO en el área de los gráficos. */
+.graph-paper {
+  background-color: var(--color-surface);
+  background-image:
+    linear-gradient(to right, rgb(215 222 228 / 0.4) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(215 222 228 / 0.4) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+/* Retícula sobre tinta, para la pantalla de acceso. */
+.ink-paper {
+  background-color: var(--color-ink);
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+/* El único momento animado del producto: la llegada de una muestra. */
+@keyframes row-flash {
+  from {
+    background-color: rgb(27 158 119 / 0.16);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+.flash {
+  animation: row-flash 900ms ease-out;
+}
+
+/* Curva de Leibniz en la pantalla de acceso. */
+@keyframes leibniz-draw {
+  0% {
+    stroke-dashoffset: 1;
+    opacity: 1;
+  }
+  70% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  92% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+.leibniz-draw {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: leibniz-draw 8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flash {
+    animation: none;
+  }
+  .leibniz-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
