@@ -8,7 +8,8 @@
     "start": "tsx src/index.ts",
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "db:reset": "tsx db/reset.ts"
+    "db:reset": "tsx db/reset.ts",
+    "db:seed-admin": "tsx db/seed-admin.ts"
   },
   "dependencies": {
     "@iot/shared": "workspace:*",
