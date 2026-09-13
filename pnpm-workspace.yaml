@@ -1,6 +1,11 @@
 packages:
   - apps/*
   - packages/*
+# pnpm 10 (CI)
 onlyBuiltDependencies:
   - bcrypt
   - esbuild
+# pnpm 11 (VPS)
+allowBuilds:
+  bcrypt: true
+  esbuild: true
