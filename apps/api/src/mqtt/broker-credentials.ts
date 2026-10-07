@@ -8,8 +8,8 @@
 // Cómo funciona:
 //   1. passwd: una línea `usuario:hash` por cuenta. El hash se calcula aquí con el MISMO formato
 //      que produce `mosquitto_passwd -b` en Mosquitto 2 ($7$ = PBKDF2-SHA512, 101 iteraciones,
-//      sal de 12 bytes, hash de 64 bytes, ambos en base64). Hacerlo en Node evita depender de
-//      `docker exec` y de que mosquitto_passwd pueda reescribir un archivo montado desde Windows.
+//      sal de 12 bytes, hash de 64 bytes, ambos en base64). Hacerlo en Node evita depender del
+//      binario `mosquitto_passwd` en el PATH.
 //      El token en claro nunca se guarda: la base de datos tiene su hash bcrypt y el passwd su
 //      hash PBKDF2.
 //   2. acl: se regenera entero desde la base de datos en cada cambio (idempotente, sin diffs):
@@ -18,7 +18,7 @@
 //      Solo entran dispositivos no revocados de usuarios activos. Un usuario en passwd pero
 //      ausente de la ACL puede conectar pero no publicar: así se "pausa" un cliente desactivado
 //      sin perder el token de su ESP32.
-//   3. Recarga: `docker kill -s HUP <contenedor>`. Mosquitto relee passwd y acl con SIGHUP sin
+//   3. Recarga: MOSQUITTO_RELOAD_CMD (p. ej. `systemctl reload mosquitto`). Mosquitto relee passwd y acl con SIGHUP sin
 //      cortar las conexiones existentes; las nuevas publicaciones ya se validan con la ACL nueva.
 //
 // Las escrituras se serializan en una cola para que dos vinculaciones simultáneas no se pisen.

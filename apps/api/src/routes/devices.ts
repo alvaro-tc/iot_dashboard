@@ -14,7 +14,7 @@ const shortId = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 export const DEVICE_COLUMNS = `id, user_id AS "userId", name, is_revoked AS "isRevoked", created_at AS "createdAt", last_seen_at AS "lastSeenAt"`;
 
 const BROKER_DOWN =
-  'No se pudo actualizar el broker MQTT. Comprueba que el contenedor de Mosquitto está en marcha (docker compose up -d) e inténtalo de nuevo.';
+  'No se pudo actualizar el broker MQTT. Comprueba que Mosquitto está en marcha e inténtalo de nuevo.';
 
 /** Revocar: marca en BD, cierra su sesión activa y quita sus credenciales del broker. */
 export async function revokeDevice(deviceId: string): Promise<void> {

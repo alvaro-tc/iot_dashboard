@@ -95,9 +95,15 @@ h3 {
 .ink-paper {
   background-color: var(--color-ink);
   background-image:
+    radial-gradient(120% 90% at 15% 0%, rgb(27 158 119 / 0.22), transparent 60%),
+    radial-gradient(90% 70% at 100% 100%, rgb(27 158 119 / 0.1), transparent 65%),
     linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
     linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
-  background-size: 8px 8px;
+  background-size:
+    auto,
+    auto,
+    8px 8px,
+    8px 8px;
 }
 
 /* El único momento animado del producto: la llegada de una muestra. */

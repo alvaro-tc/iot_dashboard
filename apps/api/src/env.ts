@@ -8,15 +8,15 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 config({ path: path.join(ROOT, '.env'), quiet: true });
 
 const schema = z.object({
-  DATABASE_URL: z.string().default('postgres://iot:iot@localhost:5433/iot'),
+  DATABASE_URL: z.string().default('postgres://iot:iot@localhost:5432/iot'),
   MQTT_URL: z.string().default('mqtt://localhost:1883'),
   MQTT_ADMIN_USER: z.string().default('iot-backend'),
   MQTT_ADMIN_PASS: z.string().min(1),
   MQTT_PUBLIC_HOST: z.string().optional(),
   MOSQUITTO_PASSWD_PATH: z.string().default('./mosquitto/passwd'),
   MOSQUITTO_ACL_PATH: z.string().default('./mosquitto/acl'),
-  // Comando que envía SIGHUP a Mosquitto. En el VPS (sin Docker): `sudo systemctl reload mosquitto`.
-  MOSQUITTO_RELOAD_CMD: z.string().default('docker kill -s HUP mosquitto'),
+  // Comando que recarga passwd/acl en Mosquitto. En Windows: `powershell -Command "Restart-Service mosquitto"`.
+  MOSQUITTO_RELOAD_CMD: z.string().default('systemctl reload mosquitto'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET debe tener al menos 16 caracteres'),
   PORT: z.coerce.number().default(4000),
   RUN_IDLE_TIMEOUT_MS: z.coerce.number().default(120_000),

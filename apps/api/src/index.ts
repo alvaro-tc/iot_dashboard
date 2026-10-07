@@ -29,7 +29,7 @@ try {
   await pool.query('SELECT 1');
 } catch (e) {
   console.error(`[db] no se pudo conectar a ${env.DATABASE_URL}: ${(e as Error).message}`);
-  console.error('     Levanta Postgres con `docker compose up -d` y aplica el esquema con `pnpm db:reset`.');
+  console.error('     Arranca Postgres y aplica el esquema con `pnpm db:reset`.');
   process.exit(1);
 }
 

@@ -3,3 +3,4 @@ dist
 .env
 *.log
 mosquitto/passwd.tmp
+mosquitto/mosquitto.db

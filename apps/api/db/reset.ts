@@ -56,6 +56,6 @@ try {
   await syncBroker(); // usuario de servicio + limpia passwd/acl de dispositivos que ya no existen
   console.log('broker: credenciales de demo registradas');
 } catch (e) {
-  console.warn(`broker: no se pudo actualizar Mosquitto (${(e as Error).message}). ¿Está en marcha docker compose?`);
+  console.warn(`broker: no se pudo actualizar Mosquitto (${(e as Error).message}). ¿Está Mosquitto en marcha?`);
 }
 await pool.end();

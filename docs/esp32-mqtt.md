@@ -62,7 +62,7 @@ Puntos que rompen la conexión si fallan:
 ## 3. Verificar que llega
 
 - En el panel web, "Mi dispositivo" debe mostrar **en línea** y actualizar "Última vez visto".
-- Desde el servidor: `docker logs mosquitto` para ver conexiones/rechazos, o `docker exec -it mosquitto mosquitto_sub -u iot-backend -P <MQTT_ADMIN_PASS> -t 'telemetry/#' -v`.
+- Desde el servidor: mira el log de Mosquitto para ver conexiones/rechazos, o suscríbete con `mosquitto_sub -u iot-backend -P <MQTT_ADMIN_PASS> -t 'telemetry/#' -v`.
 - Rechazo de conexión (`rc=5` / `Connection refused: not authorized`) = usuario o token incorrectos, o dispositivo revocado.
 - Conecta pero no llegan datos = topic mal formado o ACL no permite ese topic (revisa `userId` en el topic vs. el token).
 - No conecta en absoluto = revisa `MQTT_HOST`/`MQTT_PORT`, firewall del PC (puerto 1883 abierto en la LAN), y que el ESP32 y el PC estén en la misma red.
