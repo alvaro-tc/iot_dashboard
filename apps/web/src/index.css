@@ -1,155 +1,184 @@
 @import 'tailwindcss';
 
-@theme {
-  --color-paper: #edf0f3;
-  --color-surface: #ffffff;
-  --color-grid: #d7dee4;
-  --color-ink: #16324f;
-  --color-ink-soft: #5e7186;
-  --color-signal: #1b9e77;
-  --color-deviation: #b3202c;
-  --color-muted: #8797a8; /* dígitos aún no convergidos, series sin datos */
+/* Tema oscuro por clase en <html data-tema="oscuro">, no por media query:
+   el usuario puede forzarlo desde el toggle y queda guardado en localStorage. */
+@custom-variant dark (&:where([data-tema='oscuro'], [data-tema='oscuro'] *));
 
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+@theme {
+  /* Acento naranja de la referencia */
+  --color-acento: #f97316;
+  --color-acento-fuerte: #ea580c;
+  --color-acento-suave: #ffedd5;
+
+  /* Fondos durazno muy suaves */
+  --color-lienzo: #fff7f1;
+  --color-tarjeta: #ffffff;
+  --color-tarjeta-tenue: #fdede3;
+  --color-borde: #f3e4d8;
+
+  --color-tinta: #1c1917;
+  --color-tinta-suave: #78716c;
+
+  /* Sidebar oscura, en ambos temas */
+  --color-barra: #0f172a;
+
+  /* Estados del robot y de los sensores */
+  --color-libre: #10b981;
+  --color-precaucion: #f59e0b;
+  --color-evasion: #ef4444;
+  --color-menta: #d1fae5;
+
+  --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+
+  --radius-tarjeta: 1.5rem;
+}
+
+/* Tema oscuro: mismo naranja, fondos fríos y degradados desaturados. */
+[data-tema='oscuro'] {
+  --color-lienzo: #0b1120;
+  --color-tarjeta: #111827;
+  --color-tarjeta-tenue: #1f2937;
+  --color-borde: #1f2937;
+  --color-tinta: #f1f5f9;
+  --color-tinta-suave: #94a3b8;
+  --color-acento-suave: #431407;
+  --color-menta: #064e3b;
 }
 
 html,
-body {
-  background: var(--color-paper);
-  color: var(--color-ink);
-  font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.5;
+body,
+#root {
+  min-height: 100%;
 }
 
-h1,
-h2,
-h3 {
-  font-weight: 500;
+body {
+  background: var(--color-lienzo);
+  color: var(--color-tinta);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-ink);
+  outline: 2px solid var(--color-acento);
   outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* La entrada de tarjetas y el pulso del badge "En vivo" son decorativos:
+   quien pide menos movimiento no los recibe. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes aparecer {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes latir {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.85);
+  }
 }
 
 @layer components {
+  /* ---------- Tarjetas ---------- */
+  .tarjeta {
+    @apply rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-12px_rgba(28,25,23,0.12)];
+    animation: aparecer 180ms ease-out both;
+  }
+  .tarjeta-titulo {
+    @apply text-[17px] leading-tight font-semibold;
+  }
+  .tarjeta-sub {
+    @apply text-[13px] text-tinta-suave;
+  }
+
+  /* ---------- Botones ---------- */
   .btn {
-    @apply inline-flex h-9 cursor-pointer items-center gap-2 rounded-[4px] border border-grid bg-surface px-3.5 text-[15px] text-ink hover:border-ink-soft disabled:cursor-not-allowed disabled:opacity-50;
+    @apply inline-flex h-10 cursor-pointer items-center justify-center gap-2 rounded-full border border-borde bg-tarjeta px-4 text-[14px] font-medium text-tinta transition-colors duration-150 hover:border-acento/50 disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .btn-primary {
-    @apply border-ink bg-ink text-white hover:border-ink hover:bg-[#0e2339];
+  .btn-acento {
+    @apply border-transparent bg-acento text-white hover:bg-acento-fuerte;
   }
-  .btn-danger {
-    @apply border-deviation/40 text-deviation hover:border-deviation;
+  .btn-peligro {
+    @apply border-evasion/30 text-evasion hover:border-evasion hover:bg-evasion/5;
   }
-  .btn-ghost {
-    @apply border-transparent bg-transparent hover:border-grid;
+  .btn-fantasma {
+    @apply border-transparent bg-transparent hover:bg-tarjeta-tenue;
   }
   .btn-sm {
-    @apply h-7 px-2.5 text-[13px];
+    @apply h-8 px-3 text-[13px];
   }
-  .input {
-    @apply h-9 w-full rounded-[4px] border border-grid bg-surface px-3 text-[15px] text-ink placeholder:text-muted focus:border-ink aria-invalid:border-deviation;
+  /* Botón circular de acción de la esquina de cada tarjeta */
+  .btn-circulo {
+    @apply inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-acento/40 text-acento transition-colors duration-150 hover:bg-acento hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
   }
-  .label {
-    @apply mb-1 block text-[13px] text-ink-soft;
+  /* Píldoras de acción del pie de las tarjetas: icono en círculo + texto */
+  .chip {
+    @apply inline-flex cursor-pointer items-center gap-2 rounded-full border border-borde py-1.5 pr-4 pl-1.5 text-[13px] text-tinta-suave transition-colors duration-150 hover:border-acento/40 hover:text-tinta;
   }
-  .field-error {
-    @apply mt-1 text-[13px] text-deviation;
+  .chip-icono {
+    @apply inline-flex size-7 items-center justify-center rounded-full bg-tarjeta-tenue text-acento;
   }
-  .panel {
-    @apply border border-grid bg-surface;
+  .chip-activo {
+    @apply border-acento/50 bg-acento/10 text-tinta;
   }
-  .data-table {
-    @apply w-full border-collapse text-[13px] leading-[1.4];
+
+  /* ---------- Formularios ---------- */
+  .campo {
+    @apply h-11 w-full rounded-2xl border border-borde bg-tarjeta px-4 text-[15px] text-tinta transition-colors duration-150 placeholder:text-tinta-suave focus:border-acento aria-invalid:border-evasion;
   }
-  .data-table th {
-    @apply border-b border-grid px-3 py-2 text-left font-medium whitespace-nowrap text-ink-soft;
+  .etiqueta {
+    @apply mb-1.5 block text-[13px] font-medium text-tinta-suave;
   }
-  .data-table td {
-    @apply border-b border-grid px-3 py-2 align-middle;
+  .error-campo {
+    @apply mt-1.5 text-[13px] text-evasion;
+  }
+
+  /* ---------- Tablas ---------- */
+  .tabla {
+    @apply w-full border-collapse text-[14px];
+  }
+  .tabla th {
+    @apply border-b border-borde px-3 py-2.5 text-left text-[13px] font-medium whitespace-nowrap text-tinta-suave;
+  }
+  .tabla td {
+    @apply border-b border-borde px-3 py-2.5 align-middle;
   }
   .num {
-    @apply text-right font-mono whitespace-nowrap tabular-nums;
+    @apply text-right tabular-nums;
   }
   th.num {
-    @apply text-right font-sans;
+    @apply text-right;
   }
-  .seg {
-    @apply h-7 cursor-pointer border border-grid bg-surface px-2.5 text-[13px] text-ink-soft first:rounded-l-[4px] last:rounded-r-[4px] not-first:-ml-px aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-white;
-  }
-}
 
-/* Papel milimetrado: SOLO en el área de los gráficos. */
-.graph-paper {
-  background-color: var(--color-surface);
-  background-image:
-    linear-gradient(to right, rgb(215 222 228 / 0.4) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(215 222 228 / 0.4) 1px, transparent 1px);
-  background-size: 8px 8px;
-}
-
-/* Retícula sobre tinta, para la pantalla de acceso. */
-.ink-paper {
-  background-color: var(--color-ink);
-  background-image:
-    radial-gradient(120% 90% at 15% 0%, rgb(27 158 119 / 0.22), transparent 60%),
-    radial-gradient(90% 70% at 100% 100%, rgb(27 158 119 / 0.1), transparent 65%),
-    linear-gradient(to right, rgb(255 255 255 / 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.06) 1px, transparent 1px);
-  background-size:
-    auto,
-    auto,
-    8px 8px,
-    8px 8px;
-}
-
-/* El único momento animado del producto: la llegada de una muestra. */
-@keyframes row-flash {
-  from {
-    background-color: rgb(27 158 119 / 0.16);
+  /* ---------- Varios ---------- */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-medium;
   }
-  to {
-    background-color: transparent;
+  .punto-vivo {
+    animation: latir 1.6s ease-in-out infinite;
   }
-}
-.flash {
-  animation: row-flash 900ms ease-out;
-}
-
-/* Curva de Leibniz en la pantalla de acceso. */
-@keyframes leibniz-draw {
-  0% {
-    stroke-dashoffset: 1;
-    opacity: 1;
-  }
-  70% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  92% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-  100% {
-    stroke-dashoffset: 0;
-    opacity: 0;
-  }
-}
-.leibniz-draw {
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: leibniz-draw 8s linear infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .flash {
-    animation: none;
-  }
-  .leibniz-draw {
-    animation: none;
-    stroke-dashoffset: 0;
+  .esqueleto {
+    @apply animate-pulse rounded-xl bg-tarjeta-tenue;
   }
 }

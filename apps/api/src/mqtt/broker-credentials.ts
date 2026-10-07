@@ -1,7 +1,7 @@
 // Credenciales de Mosquitto gestionadas por el backend.
 //
 // Por qué existe: cada ESP32 tiene su propio usuario/contraseña en el broker y una ACL que solo
-// le deja escribir en telemetry/{userId}/+. Así se puede revocar un dispositivo sin tocar los
+// le deja hablar bajo roomba/{robotId}/#. Así se puede revocar un robot sin tocar los
 // demás, y ninguno puede publicar en nombre de otro cliente. El resto del código solo llama a
 // addDevice / removeDevices / syncBroker y no sabe nada de archivos ni señales.
 //
@@ -13,8 +13,8 @@
 //      El token en claro nunca se guarda: la base de datos tiene su hash bcrypt y el passwd su
 //      hash PBKDF2.
 //   2. acl: se regenera entero desde la base de datos en cada cambio (idempotente, sin diffs):
-//        user iot-backend            -> readwrite telemetry/#   (puente y simulador)
-//        user esp32-xxxx             -> write telemetry/{userId}/+
+//        user iot-backend            -> readwrite roomba/#      (puente y comandos)
+//        user roomba-xxxx            -> readwrite roomba/{robotId}/#
 //      Solo entran dispositivos no revocados de usuarios activos. Un usuario en passwd pero
 //      ausente de la ACL puede conectar pero no publicar: así se "pausa" un cliente desactivado
 //      sin perder el token de su ESP32.
@@ -26,7 +26,7 @@ import { execFile } from 'node:child_process';
 import { pbkdf2Sync, randomBytes, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { promisify } from 'node:util';
-import { deviceAclPattern } from '@iot/shared';
+import { PREFIJO, aclPatron } from '@iot/shared';
 import { pool } from '../db.ts';
 import { env, fromRoot } from '../env.ts';
 
@@ -63,13 +63,14 @@ async function writePasswd(map: Map<string, string>): Promise<void> {
 }
 
 async function writeAcl(): Promise<void> {
-  const { rows } = await pool.query<{ id: string; user_id: number }>(
-    `SELECT d.id, d.user_id FROM devices d JOIN users u ON u.id = d.user_id
+  const { rows } = await pool.query<{ id: string }>(
+    `SELECT d.id FROM dispositivos d JOIN users u ON u.id = d.user_id
      WHERE NOT d.is_revoked AND u.is_active ORDER BY d.id`,
   );
   let acl = '# Generado por apps/api (broker-credentials.ts). No editar a mano.\n\n';
-  acl += `user ${env.MQTT_ADMIN_USER}\ntopic readwrite telemetry/#\n`;
-  for (const d of rows) acl += `\nuser ${d.id}\ntopic write ${deviceAclPattern(d.user_id)}\n`;
+  acl += `user ${env.MQTT_ADMIN_USER}\ntopic readwrite ${PREFIJO}/#\n`;
+  // Cada robot publica su telemetría y recibe sus propios cmd/config, y nada más.
+  for (const d of rows) acl += `\nuser ${d.id}\ntopic readwrite ${aclPatron(d.id)}\n`;
   await fs.writeFile(aclPath, acl, 'utf8');
 }
 
@@ -85,22 +86,22 @@ function serialized<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
-/** Da de alta (o reemplaza) las credenciales de un dispositivo y recarga el broker. */
-export function addDevice(deviceId: string, token: string): Promise<void> {
+/** Da de alta (o reemplaza) las credenciales de un robot y recarga el broker. */
+export function addDevice(dispositivoId: string, token: string): Promise<void> {
   return serialized(async () => {
     const map = await readPasswd();
-    map.set(deviceId, hashPassword(token));
+    map.set(dispositivoId, hashPassword(token));
     await writePasswd(map);
     await writeAcl();
     await reloadBroker();
   });
 }
 
-/** Elimina credenciales de dispositivos (revocación o borrado de usuario) y recarga el broker. */
-export function removeDevices(deviceIds: string[]): Promise<void> {
+/** Elimina credenciales de robots (revocación o borrado de usuario) y recarga el broker. */
+export function removeDevices(dispositivoIds: string[]): Promise<void> {
   return serialized(async () => {
     const map = await readPasswd();
-    for (const id of deviceIds) map.delete(id);
+    for (const id of dispositivoIds) map.delete(id);
     await writePasswd(map);
     await writeAcl();
     await reloadBroker();
@@ -119,7 +120,7 @@ export function syncBroker(): Promise<void> {
     if (!current || !verifyPassword(current, env.MQTT_ADMIN_PASS)) {
       map.set(env.MQTT_ADMIN_USER, hashPassword(env.MQTT_ADMIN_PASS));
     }
-    const { rows } = await pool.query<{ id: string }>('SELECT id FROM devices WHERE NOT is_revoked');
+    const { rows } = await pool.query<{ id: string }>('SELECT id FROM dispositivos WHERE NOT is_revoked');
     const valid = new Set(rows.map((r) => r.id));
     for (const user of [...map.keys()]) {
       if (user !== env.MQTT_ADMIN_USER && !valid.has(user)) map.delete(user);

@@ -6,16 +6,22 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "lint": "tsc --noEmit && node src/lib/downsample.check.ts",
+    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
     "@iot/shared": "workspace:*",
+    "@tanstack/react-query": "^5.104.1",
+    "chart.js": "^4.5.1",
+    "chartjs-plugin-annotation": "^3.1.0",
+    "chartjs-plugin-zoom": "^2.2.0",
     "date-fns": "^4.1.0",
+    "lucide-react": "^1.52.0",
     "react": "^18.3.1",
+    "react-chartjs-2": "^5.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.30.1",
-    "recharts": "^2.15.4"
+    "socket.io-client": "^4.8.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.13",

@@ -1,5 +1,6 @@
-const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
-export const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:4000/ws';
+export const BASE = import.meta.env.VITE_API_URL ?? 'http://localhost:4000';
+/** Origen del servidor de Socket.IO. socket.io-client le añade el namespace y /socket.io. */
+export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? BASE;
 
 export class ApiError extends Error {
   constructor(
@@ -11,10 +12,35 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * El token va en localStorage si el usuario marcó "Recordarme", y en sessionStorage si no:
+ * así al cerrar la pestaña la sesión se va con ella. Todo acceso va envuelto en try/catch
+ * porque en navegación privada el acceso al almacenamiento puede lanzar.
+ */
 export const tokenStore = {
-  get: () => localStorage.getItem('token'),
-  set: (t: string) => localStorage.setItem('token', t),
-  clear: () => localStorage.removeItem('token'),
+  get: () => {
+    try {
+      return localStorage.getItem('token') ?? sessionStorage.getItem('token');
+    } catch {
+      return null;
+    }
+  },
+  set: (t: string, recordar = true) => {
+    try {
+      (recordar ? localStorage : sessionStorage).setItem('token', t);
+      (recordar ? sessionStorage : localStorage).removeItem('token');
+    } catch {
+      /* sin almacenamiento: la sesión dura lo que dure la página */
+    }
+  },
+  clear: () => {
+    try {
+      localStorage.removeItem('token');
+      sessionStorage.removeItem('token');
+    } catch {
+      /* nada que limpiar */
+    }
+  },
 };
 
 let onUnauthorized: () => void = () => {};

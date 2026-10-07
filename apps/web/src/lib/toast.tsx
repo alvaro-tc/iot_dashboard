@@ -25,7 +25,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           <div
             key={t.id}
             role={t.tone === 'error' ? 'alert' : 'status'}
-            className={`panel border-l-2 px-4 py-3 text-[13px] ${t.tone === 'error' ? 'border-l-deviation text-deviation' : 'border-l-ink'}`}
+            className={`rounded-2xl border border-borde bg-tarjeta px-4 py-3 text-[14px] shadow-lg ${
+              t.tone === 'error' ? 'border-l-4 border-l-evasion text-evasion' : 'border-l-4 border-l-acento'
+            }`}
           >
             {t.text}
           </div>

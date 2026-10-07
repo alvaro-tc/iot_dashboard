@@ -1,83 +1,108 @@
 import { useEffect, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.tsx';
 import { AuthProvider, useAuth } from './lib/auth.tsx';
-import { LiveProvider } from './lib/live.tsx';
+import { ProveedorRobots } from './lib/robots.tsx';
+import { ProveedorSocket } from './lib/socket.tsx';
+import { ProveedorTema } from './lib/tema.tsx';
 import { ToastProvider, useToast } from './lib/toast.tsx';
-import { Account } from './pages/Account.tsx';
+import { Eventos } from './pages/Eventos.tsx';
+import { Historial } from './pages/Historial.tsx';
 import { Login } from './pages/Login.tsx';
-import { Signup } from './pages/Signup.tsx';
-import { Overview } from './pages/admin/Overview.tsx';
-import { Sessions } from './pages/admin/Sessions.tsx';
-import { UserDetail } from './pages/admin/UserDetail.tsx';
-import { Users } from './pages/admin/Users.tsx';
-import { Device } from './pages/client/Device.tsx';
-import { MyRuns } from './pages/client/MyRuns.tsx';
-import { Simulator } from './pages/client/Simulator.tsx';
+import { Mapa } from './pages/Mapa.tsx';
+import { Panel } from './pages/Panel.tsx';
+import { Perfil } from './pages/Perfil.tsx';
+import { Registro } from './pages/Registro.tsx';
+import { Robots } from './pages/Robots.tsx';
+import { Sesiones } from './pages/Sesiones.tsx';
+import { PanelAdmin } from './pages/admin/PanelAdmin.tsx';
+import { RobotsAdmin } from './pages/admin/RobotsAdmin.tsx';
+import { Usuarios } from './pages/admin/Usuarios.tsx';
 
-const homeFor = (role: string) => (role === 'admin' ? '/admin' : '/envios');
+const inicioDe = (rol: string) => (rol === 'admin' ? '/admin' : '/');
 
-function Loading() {
-  return <p className="p-8 text-ink-soft">Cargando…</p>;
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Los datos históricos no cambian bajo los pies; lo vivo llega por WebSocket.
+      staleTime: 30_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+
+function Cargando() {
+  return <p className="p-8 text-tinta-suave">Cargando…</p>;
 }
 
-function RequireAuth({ children }: { children: ReactNode }) {
+function ExigirSesion({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <Loading />;
+  if (loading) return <Cargando />;
   return user ? children : <Navigate to="/login" replace />;
 }
 
-function GuestOnly({ children }: { children: ReactNode }) {
+function SoloInvitados({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return <Loading />;
-  return user ? <Navigate to={homeFor(user.role)} replace /> : children;
+  if (loading) return <Cargando />;
+  return user ? <Navigate to={inicioDe(user.role)} replace /> : children;
 }
 
-/** Un cliente en /admin/* recibe un 403 y vuelve a su panel. */
-function RequireRole({ role }: { role: 'admin' | 'client' }) {
+/** Un cliente que entra en /admin/* recibe un aviso y vuelve a su panel. */
+function ExigirRol({ rol }: { rol: 'admin' | 'client' }) {
   const { user } = useAuth();
   const toast = useToast();
-  const allowed = user!.role === role;
+  const permitido = user!.role === rol;
   useEffect(() => {
-    if (!allowed && role === 'admin') toast('403 · Esta sección es solo para administradores.', 'error');
-  }, [allowed, role, toast]);
-  return allowed ? <Outlet /> : <Navigate to={homeFor(user!.role)} replace />;
+    if (!permitido && rol === 'admin') toast('Esta sección es solo para administradores.', 'error');
+  }, [permitido, rol, toast]);
+  return permitido ? <Outlet /> : <Navigate to={inicioDe(user!.role)} replace />;
 }
 
-function Home() {
+/** El panel de un admin no es el mismo que el de un cliente. */
+function Inicio() {
   const { user } = useAuth();
-  return <Navigate to={homeFor(user!.role)} replace />;
+  return user!.role === 'admin' ? <Navigate to="/admin" replace /> : <Panel />;
 }
 
 export function App() {
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <AuthProvider>
-          <LiveProvider>
-            <Routes>
-              <Route path="/login" element={<GuestOnly><Login /></GuestOnly>} />
-              <Route path="/signup" element={<GuestOnly><Signup /></GuestOnly>} />
-              <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-                <Route index element={<Home />} />
-                <Route path="admin" element={<RequireRole role="admin" />}>
-                  <Route index element={<Overview />} />
-                  <Route path="usuarios" element={<Users />} />
-                  <Route path="usuarios/:id" element={<UserDetail />} />
-                  <Route path="sesiones" element={<Sessions />} />
-                </Route>
-                <Route element={<RequireRole role="client" />}>
-                  <Route path="dispositivo" element={<Device />} />
-                  <Route path="envios" element={<MyRuns />} />
-                  <Route path="simulador" element={<Simulator />} />
-                </Route>
-                <Route path="cuenta" element={<Account />} />
-              </Route>
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </LiveProvider>
-        </AuthProvider>
-      </ToastProvider>
+      <ProveedorTema>
+        <QueryClientProvider client={queryClient}>
+          <ToastProvider>
+            <AuthProvider>
+              <ProveedorSocket>
+                <ProveedorRobots>
+                  <Routes>
+                    <Route path="/login" element={<SoloInvitados><Login /></SoloInvitados>} />
+                    <Route path="/registro" element={<SoloInvitados><Registro /></SoloInvitados>} />
+
+                    <Route element={<ExigirSesion><AppLayout /></ExigirSesion>}>
+                      <Route index element={<Inicio />} />
+                      <Route path="mapa" element={<Mapa />} />
+                      <Route path="sesiones" element={<Sesiones />} />
+                      <Route path="historial" element={<Historial />} />
+                      <Route path="eventos" element={<Eventos />} />
+                      <Route path="robots" element={<Robots />} />
+                      <Route path="perfil" element={<Perfil />} />
+
+                      <Route path="admin" element={<ExigirRol rol="admin" />}>
+                        <Route index element={<PanelAdmin />} />
+                        <Route path="usuarios" element={<Usuarios />} />
+                        <Route path="robots" element={<RobotsAdmin />} />
+                      </Route>
+                    </Route>
+
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </ProveedorRobots>
+              </ProveedorSocket>
+            </AuthProvider>
+          </ToastProvider>
+        </QueryClientProvider>
+      </ProveedorTema>
     </BrowserRouter>
   );
 }

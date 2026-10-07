@@ -1,179 +1,199 @@
-import { correctPrefixLength, fmt } from '@iot/shared';
-import { useEffect, useId, useRef, type ReactNode } from 'react';
-import { useLive } from '../lib/live.tsx';
-import { formatDuration, useNow } from '../lib/time.ts';
+// Primitivos del sistema de diseño: tarjeta con encabezado, interruptor, chips, badges.
+import type { ComponentProps, ReactNode } from 'react';
 
-export function Field({
-  label,
-  error,
-  hint,
+export function Tarjeta({
+  titulo,
+  subtitulo,
+  accion,
+  pie,
+  className = '',
   children,
+  ...props
 }: {
-  label: string;
-  error?: string;
-  hint?: string;
-  children: (props: { id: string; 'aria-invalid': boolean; 'aria-describedby'?: string }) => ReactNode;
-}) {
-  const id = useId();
-  const describedBy = error ? `${id}-error` : hint ? `${id}-hint` : undefined;
+  titulo?: ReactNode;
+  subtitulo?: ReactNode;
+  /** Botón circular de la esquina superior derecha, como en la referencia. */
+  accion?: ReactNode;
+  /** Fila de chips del pie de la tarjeta. */
+  pie?: ReactNode;
+  children?: ReactNode;
+} & ComponentProps<'section'>) {
   return (
-    <div>
-      <label htmlFor={id} className="label">
-        {label}
-      </label>
-      {children({ id, 'aria-invalid': !!error, 'aria-describedby': describedBy })}
-      {error ? (
-        <p id={`${id}-error`} className="field-error">
-          {error}
-        </p>
-      ) : hint ? (
-        <p id={`${id}-hint`} className="mt-1 text-[13px] text-ink-soft">
-          {hint}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-export function ErrorNote({ children }: { children: ReactNode }) {
-  if (!children) return null;
-  return (
-    <p role="alert" className="border-l-2 border-deviation bg-surface px-3 py-2 text-[13px] text-deviation">
-      {children}
-    </p>
-  );
-}
-
-export function LiveDot({ label }: { label?: string }) {
-  return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="inline-block size-2 shrink-0 rounded-full bg-signal" aria-hidden />
-      {label && <span>{label}</span>}
-    </span>
-  );
-}
-
-const WS_LABEL = {
-  open: { text: 'conectado', dot: 'bg-signal' },
-  connecting: { text: 'conectando', dot: 'bg-muted' },
-  reconnecting: { text: 'reconectando', dot: 'bg-muted' },
-  offline: { text: 'sin conexión', dot: 'bg-deviation' },
-} as const;
-
-export function WsIndicator() {
-  const { status } = useLive();
-  const s = WS_LABEL[status];
-  return (
-    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-soft" role="status" title="Estado del tiempo real">
-      <span className={`inline-block size-2 rounded-full ${s.dot}`} aria-hidden />
-      {s.text}
-    </span>
-  );
-}
-
-export function PageHeader({ title, subtitle, right }: { title: ReactNode; subtitle?: ReactNode; right?: ReactNode }) {
-  return (
-    <header className="mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-grid pb-4">
-      <div>
-        <h1 className="text-[24px] leading-tight">{title}</h1>
-        {subtitle && <p className="mt-1 text-[13px] text-ink-soft">{subtitle}</p>}
-      </div>
-      <div className="flex flex-wrap items-center gap-4 text-[13px]">
-        {right}
-        <WsIndicator />
-      </div>
-    </header>
-  );
-}
-
-export function SectionTitle({ id, children, right }: { id?: string; children: ReactNode; right?: ReactNode }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-      <h2 id={id} className="text-[18px]">
-        {children}
-      </h2>
-      {right}
-    </div>
-  );
-}
-
-/** Valor aproximado con el prefijo ya correcto en tinta y el resto en gris. */
-export function Digits({ value, real }: { value: number; real: number }) {
-  const text = fmt.value(value);
-  const n = correctPrefixLength(value, real);
-  return (
-    <span className="font-mono tabular-nums">
-      <span className="text-ink">{text.slice(0, n)}</span>
-      <span className="text-muted">{text.slice(n)}</span>
-    </span>
-  );
-}
-
-/** Duración; si no hay fin, corre en vivo. */
-export function Elapsed({ from, to }: { from: string; to?: string | null }) {
-  const now = useNow(1000, !to);
-  const end = to ? new Date(to).getTime() : now;
-  return <span className="font-mono tabular-nums">{formatDuration(end - new Date(from).getTime())}</span>;
-}
-
-/** Diálogo nativo: foco atrapado, Esc y fondo inerte sin librerías. */
-export function Dialog({
-  open,
-  onClose,
-  title,
-  children,
-  wide,
-  xl,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: ReactNode;
-  wide?: boolean;
-  xl?: boolean;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current!;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-  return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      aria-label={title}
-      className={`m-auto border border-grid bg-surface p-0 text-ink backdrop:bg-ink/30 ${xl ? 'w-[min(1400px,calc(100vw-32px))]' : wide ? 'w-[min(720px,calc(100vw-32px))]' : 'w-[min(480px,calc(100vw-32px))]'}`}
-    >
-      {open && (
-        <>
-          <div className="flex items-center justify-between border-b border-grid px-5 py-3">
-            <h2 className="text-[18px]">{title}</h2>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Cerrar">
-              ✕
-            </button>
+    <section className={`tarjeta flex flex-col ${className}`} {...props}>
+      {(titulo || accion) && (
+        <header className="mb-4 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            {titulo && <h2 className="tarjeta-titulo truncate">{titulo}</h2>}
+            {subtitulo && <p className="tarjeta-sub truncate">{subtitulo}</p>}
           </div>
-          <div className={`${xl ? 'max-h-[85vh]' : 'max-h-[75vh]'} overflow-y-auto p-5`}>{children}</div>
-        </>
+          {accion}
+        </header>
       )}
-    </dialog>
+      <div className="min-h-0 flex-1">{children}</div>
+      {pie && <div className="mt-4 flex flex-wrap gap-2">{pie}</div>}
+    </section>
   );
 }
 
-export function CopyButton({ text, label = 'Copiar' }: { text: string; label?: string }) {
-  const ref = useRef<HTMLButtonElement>(null);
+export function Chip({
+  icono,
+  activo = false,
+  children,
+  ...props
+}: { icono?: ReactNode; activo?: boolean } & ComponentProps<'button'>) {
+  return (
+    <button type="button" className={`chip ${activo ? 'chip-activo' : ''}`} aria-pressed={activo} {...props}>
+      {icono && <span className="chip-icono">{icono}</span>}
+      {children}
+    </button>
+  );
+}
+
+/** Interruptor naranja de las tarjetas de la fila inferior. */
+export function Interruptor({
+  activo,
+  onCambiar,
+  etiqueta,
+  disabled,
+}: {
+  activo: boolean;
+  onCambiar: (v: boolean) => void;
+  etiqueta: string;
+  disabled?: boolean;
+}) {
   return (
     <button
-      ref={ref}
       type="button"
-      className="btn btn-sm"
-      onClick={async () => {
-        await navigator.clipboard.writeText(text);
-        if (ref.current) ref.current.textContent = 'Copiado';
-        setTimeout(() => ref.current && (ref.current.textContent = label), 1500);
-      }}
+      role="switch"
+      aria-checked={activo}
+      aria-label={etiqueta}
+      disabled={disabled}
+      onClick={() => onCambiar(!activo)}
+      className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 disabled:cursor-not-allowed disabled:opacity-50 ${
+        activo ? 'bg-acento' : 'bg-borde'
+      }`}
     >
-      {label}
+      <span
+        className={`inline-block size-5 rounded-full bg-white shadow transition-transform duration-200 ${
+          activo ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
     </button>
+  );
+}
+
+export function Badge({ tono = 'neutro', children }: { tono?: 'neutro' | 'vivo' | 'alerta' | 'ok'; children: ReactNode }) {
+  const clases = {
+    neutro: 'bg-tarjeta-tenue text-tinta-suave',
+    vivo: 'bg-evasion/15 text-evasion',
+    alerta: 'bg-precaucion/15 text-precaucion',
+    ok: 'bg-libre/15 text-libre',
+  }[tono];
+  return <span className={`badge ${clases}`}>{children}</span>;
+}
+
+/** Badge "● En vivo" / "Desconectado" del mapa. */
+export function BadgeVivo({ enVivo, texto }: { enVivo: boolean; texto?: string }) {
+  return (
+    <span
+      className={`badge backdrop-blur ${enVivo ? 'bg-evasion/20 text-white' : 'bg-white/10 text-white/70'}`}
+    >
+      <span className={`size-2 rounded-full ${enVivo ? 'bg-evasion punto-vivo' : 'bg-white/50'}`} />
+      {texto ?? (enVivo ? 'En vivo' : 'Desconectado')}
+    </span>
+  );
+}
+
+/** Botón circular translúcido de la fila inferior del mapa, como en la referencia. */
+export function BotonMapa({
+  etiqueta,
+  acento = false,
+  children,
+  ...props
+}: { etiqueta: string; acento?: boolean } & ComponentProps<'button'>) {
+  return (
+    <button
+      type="button"
+      aria-label={etiqueta}
+      title={etiqueta}
+      className={`inline-flex size-11 cursor-pointer items-center justify-center rounded-full backdrop-blur transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
+        acento ? 'bg-acento text-white hover:bg-acento-fuerte' : 'bg-white/15 text-white hover:bg-white/25'
+      }`}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+export function Esqueleto({ className = 'h-24' }: { className?: string }) {
+  return <div className={`esqueleto ${className}`} aria-hidden />;
+}
+
+export function Vacio({ titulo, descripcion, accion }: { titulo: string; descripcion?: string; accion?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <p className="text-[16px] font-semibold">{titulo}</p>
+      {descripcion && <p className="max-w-sm text-[14px] text-tinta-suave">{descripcion}</p>}
+      {accion}
+    </div>
+  );
+}
+
+export function ErrorConReintento({ mensaje, onReintentar }: { mensaje: string; onReintentar?: () => void }) {
+  return (
+    <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+      <p className="text-[14px] text-evasion">{mensaje}</p>
+      {onReintentar && (
+        <button type="button" className="btn btn-sm" onClick={onReintentar}>
+          Reintentar
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Control segmentado (Mapa / Radar, 1 min / 5 min / 1 h). */
+export function Segmentado<T extends string>({
+  opciones,
+  valor,
+  onCambiar,
+  etiqueta,
+  oscuro = false,
+}: {
+  opciones: { valor: T; texto: string }[];
+  valor: T;
+  onCambiar: (v: T) => void;
+  etiqueta: string;
+  /** Variante para el interior oscuro del mapa. */
+  oscuro?: boolean;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label={etiqueta}
+      className={`inline-flex rounded-full p-1 ${oscuro ? 'bg-white/10 backdrop-blur' : 'bg-tarjeta-tenue'}`}
+    >
+      {opciones.map((o) => {
+        const activo = o.valor === valor;
+        return (
+          <button
+            key={o.valor}
+            type="button"
+            aria-pressed={activo}
+            onClick={() => onCambiar(o.valor)}
+            className={`cursor-pointer rounded-full px-3 py-1 text-[13px] font-medium transition-colors duration-150 ${
+              activo
+                ? 'bg-acento text-white'
+                : oscuro
+                  ? 'text-white/70 hover:text-white'
+                  : 'text-tinta-suave hover:text-tinta'
+            }`}
+          >
+            {o.texto}
+          </button>
+        );
+      })}
+    </div>
   );
 }

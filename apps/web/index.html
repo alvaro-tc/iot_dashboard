@@ -3,14 +3,29 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Primera Evaluación IoT</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' fill='%2316324F'/><path d='M2 4 L5 12 L8 6 L11 10 L14 8' stroke='%231B9E77' stroke-width='1.5' fill='none'/></svg>" />
+    <title>Roomba · Panel</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='14' fill='%23F97316'/><circle cx='16' cy='16' r='5' fill='%23fff'/><rect x='2' y='11' width='4' height='10' rx='2' fill='%230F172A'/><rect x='26' y='11' width='4' height='10' rx='2' fill='%230F172A'/></svg>"
+    />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Antes de pintar: evita el parpadeo de tema claro al recargar en oscuro.
+      (() => {
+        try {
+          const guardado = localStorage.getItem('tema');
+          const oscuro = guardado ? guardado === 'oscuro' : matchMedia('(prefers-color-scheme: dark)').matches;
+          document.documentElement.dataset.tema = oscuro ? 'oscuro' : 'claro';
+        } catch {
+          document.documentElement.dataset.tema = 'claro';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,11 +1,12 @@
 {
-  "name": "primera-evaluacion-iot",
+  "name": "iot-dashboard",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"pnpm --filter @iot/api dev\" \"pnpm --filter @iot/web dev\"",
     "build": "concurrently -n api,web -c blue,green \"pnpm --filter @iot/api build\" \"pnpm --filter @iot/web build\"",
-    "lint": "concurrently -n api,web,shared -c blue,green,gray \"pnpm --filter @iot/api lint\" \"pnpm --filter @iot/web lint\" \"pnpm --filter @iot/shared check\"",
+    "lint": "concurrently -n api,web,shared,sim -c blue,green,gray,magenta \"pnpm --filter @iot/api lint\" \"pnpm --filter @iot/web lint\" \"pnpm --filter @iot/shared check\" \"pnpm --filter @iot/simulador lint\"",
+    "simular": "pnpm --filter @iot/simulador simular",
     "db:reset": "pnpm --filter @iot/api db:reset"
   },
   "devDependencies": {

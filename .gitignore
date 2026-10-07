@@ -4,3 +4,5 @@ dist
 *.log
 mosquitto/passwd.tmp
 mosquitto/mosquitto.db
+firmware/config.py
+var/

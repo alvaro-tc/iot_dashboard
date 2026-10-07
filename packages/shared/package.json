@@ -9,6 +9,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "check": "node src/series.check.ts"
+    "check": "node src/robot.check.ts"
   }
 }

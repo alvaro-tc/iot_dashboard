@@ -7,7 +7,7 @@ import type { User } from './types.ts';
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, recordar?: boolean) => Promise<void>;
   signup: (body: { name: string; email: string; password: string; confirm: string }) => Promise<void>;
   logout: () => void;
   setUser: (u: User) => void;
@@ -48,8 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, [toast]);
 
-  const finish = (r: { token: string; user: User }) => {
-    tokenStore.set(r.token);
+  const finish = (r: { token: string; user: User }, recordar = true) => {
+    tokenStore.set(r.token, recordar);
     setUser(r.user);
   };
 
@@ -58,8 +58,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     loading,
     logout,
     setUser,
-    login: async (email, password) =>
-      finish(await api('/api/auth/login', { method: 'POST', body: { email, password } })),
+    login: async (email, password, recordar = true) =>
+      finish(await api('/api/auth/login', { method: 'POST', body: { email, password } }), recordar),
     signup: async (body) => finish(await api('/api/auth/signup', { method: 'POST', body })),
   };
 

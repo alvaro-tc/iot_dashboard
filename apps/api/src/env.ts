@@ -19,7 +19,8 @@ const schema = z.object({
   MOSQUITTO_RELOAD_CMD: z.string().default('systemctl reload mosquitto'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET debe tener al menos 16 caracteres'),
   PORT: z.coerce.number().default(4000),
-  RUN_IDLE_TIMEOUT_MS: z.coerce.number().default(120_000),
+  // Una sesión sin telemetría durante este tiempo se cierra sola.
+  SESION_INACTIVA_MS: z.coerce.number().default(120_000),
 });
 
 const parsed = schema.safeParse(process.env);
