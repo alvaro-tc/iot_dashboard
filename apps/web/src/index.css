@@ -192,9 +192,9 @@ body {
     @apply h-full overflow-hidden;
     animation: none; /* la animación de entrada parpadearía en cada arrastre */
   }
-  /* Columna derecha del modo edición: ocupa todo el alto disponible, pegada al borde del
-     panel. No es una tarjeta flotante: es parte del tablero. */
-  .lateral-widgets {
+  /* Cajón del modo edición: columna propia a la derecha del tablero, nunca encima. Tapar las
+     tarjetas mientras se colocan impide justamente lo que se está haciendo. */
+  .cajon-widgets {
     @apply flex min-h-0 shrink-0 flex-col border-l border-borde bg-tarjeta/60 pl-4;
   }
   /* Miniatura del widget: el widget real dibujado a tamaño completo y escalado, recortado a
@@ -207,26 +207,34 @@ body {
     animation: none;
   }
   /* Velo de modo edición: se queda con el ratón para que no lo capturen el mapa ni las
-     gráficas, que tienen pan y zoom propios. */
+     gráficas, que tienen pan y zoom propios. El contorno se dibuja FUERA de la tarjeta
+     (outline-offset, que cabe de sobra en el margen de la grilla): un `ring` se pintaría justo
+     encima del borde de la tarjeta y parecería que al editar las tarjetas pierden el borde. */
   .velo-editar {
-    @apply absolute inset-0 z-10 cursor-move rounded-[var(--radius-tarjeta)] bg-acento/5 ring-2 ring-acento/40;
+    @apply absolute inset-0 z-10 cursor-move rounded-[var(--radius-tarjeta)];
+    outline: 2px solid color-mix(in srgb, var(--color-acento) 65%, transparent);
+    outline-offset: 3px;
   }
-  /* Controles de esquina del widget en edición, al estilo del escritorio de Android: por encima
-     del velo (z-10) y asomando fuera de la tarjeta para no tapar su contenido. */
+  .velo-editar:active {
+    cursor: grabbing;
+  }
+  /* Controles de esquina del widget en edición. Van DENTRO de la tarjeta (asomando fuera se
+     metían en la banda de la de al lado) y sobre su propia píldora opaca: las tarjetas llevan
+     ya un botón redondo en esa misma esquina y, sin fondo, los dos se leen amontonados. */
   .acciones-widget {
-    @apply absolute -top-2 -right-2 z-20 flex items-center gap-1;
+    @apply absolute top-2 right-2 z-20 flex items-center gap-1 rounded-full border border-borde bg-tarjeta p-1 shadow-md;
   }
   .boton-widget {
-    @apply inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-borde bg-tarjeta text-tinta-suave shadow-md transition-colors duration-150;
+    @apply inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-tinta-suave transition-colors duration-150;
   }
   .boton-widget:hover {
-    @apply border-acento text-acento;
+    @apply bg-tarjeta-tenue text-acento;
   }
   .boton-widget-quitar {
-    @apply border-transparent bg-evasion text-white;
+    @apply bg-evasion text-white;
   }
   .boton-widget-quitar:hover {
-    @apply border-transparent bg-evasion text-white opacity-80;
+    @apply bg-evasion text-white opacity-80;
   }
   /* Por encima del velo (z-10), o el velo se queda también con los tiradores. */
   .react-grid-item > .react-resizable-handle {

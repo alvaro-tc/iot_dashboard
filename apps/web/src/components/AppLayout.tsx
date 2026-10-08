@@ -10,6 +10,7 @@ import {
   CalendarClock,
   CircleHelp,
   History,
+  PanelLeft,
   LayoutDashboard,
   LogOut,
   Map,
@@ -60,17 +61,35 @@ function Logo() {
 export function AppLayout() {
   const { user, logout } = useAuth();
   const [ayuda, setAyuda] = useState(false);
+  const [abierta, setAbierta] = useState(false);
   const enlaces = user!.role === 'admin' ? ENLACES_ADMIN : ENLACES_CLIENTE;
   const enMovil = enlaces.filter((l) => l.movil).slice(0, 5);
 
   return (
-    <div className="min-h-screen md:pl-[76px]">
-      {/* ---- Sidebar (≥768 px) ---- */}
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[76px] flex-col items-center gap-2 bg-barra py-5 md:flex">
-        <NavLink to="/" aria-label="Inicio" className="mb-4">
-          <Logo />
-        </NavLink>
-        <nav aria-label="Principal" className="flex flex-1 flex-col items-center gap-2">
+    <div className={`min-h-screen transition-[padding] duration-150 ${abierta ? 'md:pl-[220px]' : 'md:pl-[76px]'}`}>
+      {/* ---- Sidebar (≥768 px): estrecha en iconos, se despliega con los nombres ---- */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 hidden flex-col gap-2 bg-barra py-5 transition-[width] duration-150 md:flex ${
+          abierta ? 'w-[220px] items-stretch px-3' : 'w-[76px] items-center'
+        }`}
+      >
+        <div className={`mb-4 flex items-center gap-2 ${abierta ? 'justify-between' : 'flex-col'}`}>
+          <NavLink to="/" aria-label="Inicio" className="flex items-center gap-2">
+            <Logo />
+            {abierta && <span className="text-[15px] font-semibold text-white">Robots</span>}
+          </NavLink>
+          <button
+            type="button"
+            title={abierta ? 'Contraer menú' : 'Desplegar menú'}
+            aria-label={abierta ? 'Contraer menú' : 'Desplegar menú'}
+            aria-expanded={abierta}
+            onClick={() => setAbierta(!abierta)}
+            className="inline-flex size-9 cursor-pointer items-center justify-center rounded-full text-white/60 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+          >
+            <PanelLeft className="size-5" />
+          </button>
+        </div>
+        <nav aria-label="Principal" className="flex flex-1 flex-col gap-2">
           {enlaces.map(({ to, texto, Icono, end }) => (
             <NavLink
               key={to}
@@ -79,12 +98,13 @@ export function AppLayout() {
               title={texto}
               aria-label={texto}
               className={({ isActive }) =>
-                `inline-flex size-11 items-center justify-center rounded-full transition-colors duration-150 ${
-                  isActive ? 'bg-acento text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
-                }`
+                `flex items-center gap-3 transition-colors duration-150 ${
+                  abierta ? 'h-11 rounded-full px-3' : 'size-11 justify-center self-center rounded-full'
+                } ${isActive ? 'bg-acento text-white' : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'}`
               }
             >
-              <Icono className="size-5" />
+              <Icono className="size-5 shrink-0" />
+              {abierta && <span className="truncate text-[14px]">{texto}</span>}
             </NavLink>
           ))}
         </nav>
@@ -93,18 +113,24 @@ export function AppLayout() {
           title="Ayuda"
           aria-label="Ayuda"
           onClick={() => setAyuda(true)}
-          className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-white/5 text-white/60 transition-colors duration-150 hover:bg-white/10 hover:text-white"
+          className={`flex cursor-pointer items-center gap-3 bg-white/5 text-white/60 transition-colors duration-150 hover:bg-white/10 hover:text-white ${
+            abierta ? 'h-11 rounded-full px-3' : 'size-11 justify-center self-center rounded-full'
+          }`}
         >
-          <CircleHelp className="size-5" />
+          <CircleHelp className="size-5 shrink-0" />
+          {abierta && <span className="text-[14px]">Ayuda</span>}
         </button>
         <button
           type="button"
           title="Cerrar sesión"
           aria-label="Cerrar sesión"
           onClick={logout}
-          className="inline-flex size-11 cursor-pointer items-center justify-center rounded-full bg-evasion/15 text-evasion transition-colors duration-150 hover:bg-evasion hover:text-white"
+          className={`flex cursor-pointer items-center gap-3 bg-evasion/15 text-evasion transition-colors duration-150 hover:bg-evasion hover:text-white ${
+            abierta ? 'h-11 rounded-full px-3' : 'size-11 justify-center self-center rounded-full'
+          }`}
         >
-          <LogOut className="size-5" />
+          <LogOut className="size-5 shrink-0" />
+          {abierta && <span className="text-[14px]">Cerrar sesión</span>}
         </button>
       </aside>
 

@@ -1,7 +1,7 @@
-// Barra superior: buscador de robots, "+ Agregar robot", campana de notificaciones,
+// Barra superior: selector del robot activo, campana de notificaciones,
 // toggle de tema y menú de usuario.
 import { useEffect, useRef, useState } from 'react';
-import { Bell, ChevronDown, Moon, Plus, Search, Sun } from 'lucide-react';
+import { Bell, Bot, ChevronDown, Moon, Plus, Sun } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import type { EventoRobot } from '@iot/shared';
 import { useAuth } from '../lib/auth.tsx';
@@ -22,8 +22,7 @@ export function BarraSuperior() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const [busqueda, setBusqueda] = useState('');
-  const [abierto, setAbierto] = useState<'usuario' | 'campana' | null>(null);
+  const [abierto, setAbierto] = useState<'usuario' | 'campana' | 'robot' | null>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [notificaciones, setNotificaciones] = useState<EventoRobot[]>([]);
   const [sinLeer, setSinLeer] = useState(0);
@@ -50,54 +49,71 @@ export function BarraSuperior() {
     };
   }, [abierto]);
 
-  const coincidencias = busqueda.trim()
-    ? robots.filter((r) => `${r.nombre} ${r.ubicacion}`.toLowerCase().includes(busqueda.trim().toLowerCase()))
-    : [];
-
   return (
     <div ref={contenedor} className="sticky top-0 z-20 px-4 pt-4 pb-2 sm:px-6">
       <div className="flex items-center gap-2 rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta px-3 py-2.5 shadow-[0_1px_2px_rgba(28,25,23,0.04)] sm:gap-3 sm:px-4">
-        {/* Buscador: en móvil se reduce a un icono que abre el campo */}
+        {/* Selector del robot activo */}
         <div className="relative min-w-0 flex-1">
-          <label className="sr-only" htmlFor="buscar-robot">
-            Buscar robot
-          </label>
-          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-tinta-suave" />
-          <input
-            id="buscar-robot"
-            type="search"
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            placeholder="Buscar robot…"
-            className="h-10 w-full rounded-full bg-transparent pl-9 text-[14px] outline-none placeholder:text-tinta-suave"
-          />
-          {coincidencias.length > 0 && (
-            <ul className="absolute top-12 left-0 z-30 w-full overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
-              {coincidencias.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    className="w-full cursor-pointer px-4 py-2.5 text-left text-[14px] hover:bg-tarjeta-tenue"
-                    onClick={() => {
-                      elegir(r.id);
-                      setBusqueda('');
-                    }}
-                  >
-                    {r.nombre}
-                    <span className="ml-2 text-[13px] text-tinta-suave">{r.ubicacion}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+          <button
+            type="button"
+            aria-expanded={abierto === 'robot'}
+            aria-label="Robot activo"
+            className="flex max-w-full cursor-pointer items-center gap-2 rounded-full px-2 py-1.5 hover:bg-tarjeta-tenue"
+            onClick={() => setAbierto(abierto === 'robot' ? null : 'robot')}
+          >
+            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-acento/15 text-acento">
+              <Bot className="size-5" />
+            </span>
+            <span className="min-w-0 text-left">
+              <span className="block max-w-[180px] truncate text-[14px] font-medium">
+                {robot?.nombre ?? 'Sin robots'}
+              </span>
+              {robot && (
+                <span className="block max-w-[180px] truncate text-[12px] text-tinta-suave">{robot.ubicacion}</span>
+              )}
+            </span>
+            <ChevronDown className="size-4 shrink-0 text-tinta-suave" />
+          </button>
+          {abierto === 'robot' && (
+            <div className="absolute top-12 left-0 z-30 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
+              <ul className="max-h-80 overflow-y-auto">
+                {robots.map((r) => (
+                  <li key={r.id}>
+                    <button
+                      type="button"
+                      className={`w-full cursor-pointer px-4 py-2.5 text-left text-[14px] hover:bg-tarjeta-tenue ${
+                        r.id === robot?.id ? 'text-acento' : ''
+                      }`}
+                      onClick={() => {
+                        elegir(r.id);
+                        setAbierto(null);
+                      }}
+                    >
+                      {r.nombre}
+                      <span className="ml-2 text-[13px] text-tinta-suave">{r.ubicacion}</span>
+                    </button>
+                  </li>
+                ))}
+                {robots.length === 0 && (
+                  <li className="px-4 py-6 text-center text-[13px] text-tinta-suave">Aún no tienes robots.</li>
+                )}
+              </ul>
+              {user!.role === 'client' && (
+                <button
+                  type="button"
+                  className="flex w-full cursor-pointer items-center gap-2 border-t border-borde px-4 py-2.5 text-left text-[14px] text-acento hover:bg-tarjeta-tenue"
+                  onClick={() => {
+                    setAbierto(null);
+                    setNuevoRobot(true);
+                  }}
+                >
+                  <Plus className="size-4" />
+                  Añadir robot
+                </button>
+              )}
+            </div>
           )}
         </div>
-
-        {user!.role === 'client' && (
-          <button type="button" className="btn btn-acento shrink-0 px-3 sm:px-4" onClick={() => setNuevoRobot(true)}>
-            <Plus className="size-4" />
-            <span className="hidden sm:inline">Agregar robot</span>
-          </button>
-        )}
 
         {/* Campana */}
         <div className="relative shrink-0">
@@ -211,13 +227,6 @@ export function BarraSuperior() {
           )}
         </div>
       </div>
-
-      {/* Robot activo en móvil: la tarjeta del mapa lo muestra en escritorio */}
-      {robot && (
-        <p className="mt-2 px-2 text-[13px] text-tinta-suave sm:hidden">
-          Robot activo: <span className="font-medium text-tinta">{robot.nombre}</span>
-        </p>
-      )}
 
       {nuevoRobot && <DialogoNuevoRobot onCerrar={() => setNuevoRobot(false)} />}
     </div>

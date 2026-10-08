@@ -17,26 +17,45 @@ import {
 
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
 export const COLUMNAS = 24;
+/**
+ * El tablero tiene SIEMPRE estas filas, pasen lo que pasen las tarjetas. El alto de fila sale de
+ * repartir el alto libre entre ellas, así que no depende de la disposición: si dependiera, mover
+ * una tarjeta una fila más abajo reescalaría el tablero entero debajo del cursor mientras se
+ * arrastra, y la tarjeta se escaparía del ratón. Con `maxRows` nadie puede pasar de aquí.
+ */
+export const FILAS = 10;
+/** Alto de fila cuando no se reparte (una columna), y suelo por debajo del cual no se lee nada. */
 export const ALTO_FILA = 40;
+export const ALTO_FILA_MIN = 36;
 export const MARGEN = 16;
 /** Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. */
 export const ANCHO_GRILLA = 1024;
-/** Ancho del panel lateral de widgets del modo edición. La grilla cede ese espacio y se encoge. */
-export const ANCHO_LATERAL = 336;
-/** Tamaño al que se dibuja la miniatura antes de escalarla, y el ancho de su caja en el lateral. */
-export const MINIATURA = { ancho: 560, alto: 300, caja: 288 } as const;
-/** Umbral de la grilla ya encogida: en edición entra el cajón sin colapsar a una columna. */
-export const ANCHO_GRILLA_EDICION = ANCHO_GRILLA - ANCHO_LATERAL - MARGEN;
+/**
+ * Ancho del cajón de widgets del modo edición. El cajón va AL LADO del tablero, nunca encima:
+ * tapar las tarjetas mientras se colocan es peor que estrecharlas. Lo que se encoge es el ancho
+ * de columna, no la disposición: las cajas siguen en las mismas celdas y al salir vuelven.
+ */
+export const ANCHO_LATERAL = 340;
+/**
+ * Tamaño al que se dibuja la miniatura antes de escalarla, y el ancho de su caja en el cajón.
+ * `caja` sale de repartir el ancho del cajón en DOS columnas: en una sola, siete widgets no
+ * caben de un vistazo y hay que bajar scrolleando para ver qué hay.
+ */
+export const MINIATURA = { ancho: 560, alto: 240, caja: 144 } as const;
 
-/** `caja` es la posición por defecto; `min` el tamaño por debajo del cual la tarjeta no se lee. */
+/**
+ * `caja` es la posición por defecto; `min` el tamaño por debajo del cual la tarjeta no se lee.
+ * Todo cabe en FILAS filas: con el alto típico de una portátil salen filas de ~42 px, así que
+ * un `min.h` de 3 son ~160 px y uno de 4 son ~215 px, que es lo que piden estas tarjetas.
+ */
 export const TARJETAS_PANEL = [
-  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 9 }, min: { w: 8, h: 7 } },
-  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 4 }, min: { w: 6, h: 3 } },
-  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 4, w: 5, h: 5 }, min: { w: 4, h: 4 } },
-  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 4, w: 5, h: 5 }, min: { w: 4, h: 4 } },
-  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
-  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
-  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
+  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 6 }, min: { w: 8, h: 4 } },
+  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 3 }, min: { w: 6, h: 2 } },
+  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
+  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
+  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
 ] as const;
 
 /** Presets del diálogo de edición de un widget: columnas y filas, acotados por su mínimo. */
@@ -46,9 +65,9 @@ export const ANCHOS = [
   { valor: 24, texto: 'Completo' },
 ] as const;
 export const ALTOS = [
-  { valor: 4, texto: 'Bajo' },
-  { valor: 6, texto: 'Medio' },
-  { valor: 9, texto: 'Alto' },
+  { valor: 3, texto: 'Bajo' },
+  { valor: 4, texto: 'Medio' },
+  { valor: 6, texto: 'Alto' },
 ] as const;
 
 export type IdTarjeta = (typeof TARJETAS_PANEL)[number]['id'];
@@ -60,7 +79,9 @@ interface Caja {
 }
 
 const CLAVE = 'panel-tarjetas';
-const CLAVE_CAJAS = 'panel-disposicion';
+// v2: el tablero pasó de "tantas filas como haga falta" a FILAS fijas, así que las posiciones
+// guardadas con el esquema viejo ya no valen y se empieza de cero en vez de arrastrarlas.
+const CLAVE_CAJAS = 'panel-disposicion-v2';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 const POR_DEFECTO = Object.fromEntries(TARJETAS_PANEL.map((t) => [t.id, t.caja])) as Record<IdTarjeta, Caja>;
 
@@ -151,7 +172,12 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
     setCajas((prev) => {
       const c = prev[id] ?? POR_DEFECTO[id];
       const ancho = Math.min(COLUMNAS, Math.max(min.w, w));
-      return { ...prev, [id]: { ...c, x: Math.min(c.x, COLUMNAS - ancho), w: ancho, h: Math.max(min.h, h) } };
+      // El alto no puede salirse del tablero: se acota a FILAS y, si hace falta, se sube la caja.
+      const alto = Math.min(FILAS, Math.max(min.h, h));
+      return {
+        ...prev,
+        [id]: { x: Math.min(c.x, COLUMNAS - ancho), y: Math.min(c.y, FILAS - alto), w: ancho, h: alto },
+      };
     });
   }, []);
 
