@@ -1,10 +1,13 @@
 # Generado por apps/api (broker-credentials.ts). No editar a mano.
 
 user iot-backend
-topic readwrite telemetry/#
+topic readwrite roomba/#
 
-user esp32-alvaro01
-topic write telemetry/2/+
+user roomba-cocina
+topic readwrite roomba/roomba-cocina/#
 
-user esp32-jorge001
-topic write telemetry/4/+
+user roomba-maria
+topic readwrite roomba/roomba-maria/#
+
+user roomba-sala
+topic readwrite roomba/roomba-sala/#

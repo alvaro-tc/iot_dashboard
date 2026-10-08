@@ -137,9 +137,14 @@ body {
   .btn-circulo {
     @apply inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full border border-acento/40 text-acento transition-colors duration-150 hover:bg-acento hover:text-white disabled:cursor-not-allowed disabled:opacity-50;
   }
-  /* Píldoras de acción del pie de las tarjetas: icono en círculo + texto */
+  /* Píldoras informativas del pie de las tarjetas: icono en círculo + texto. Las del panel
+     son de solo vista, así que no llevan cursor ni estado "activo" de botón; los sitios que sí
+     necesitan una píldora clicable (Robots, filtros) usan la clase directamente sobre un <button>. */
   .chip {
-    @apply inline-flex cursor-pointer items-center gap-2 rounded-full border border-borde py-1.5 pr-4 pl-1.5 text-[13px] text-tinta-suave transition-colors duration-150 hover:border-acento/40 hover:text-tinta;
+    @apply inline-flex items-center gap-2 rounded-full border border-borde py-1.5 pr-4 pl-1.5 text-[13px] text-tinta-suave;
+  }
+  button.chip {
+    @apply cursor-pointer transition-colors duration-150 hover:border-acento/40 hover:text-tinta;
   }
   .chip-icono {
     @apply inline-flex size-7 items-center justify-center rounded-full bg-tarjeta-tenue text-acento;
@@ -188,17 +193,18 @@ body {
   }
 
   /* ---------- Grilla del panel (react-grid-layout) ---------- */
-  /* La celda manda el alto y la tarjeta lo rellena. Lo que no entra NO se recorta: la tarjeta
-     hace scroll. Recortando, al encoger un widget se cortaban los pies de las tarjetas y los
-     controles del mapa quedaban medio fuera. Padding algo menor que fuera del panel: en una
-     celda pequeña esos 4 px por lado son la diferencia entre caber y no caber. */
+  /* La celda manda el alto y la tarjeta lo rellena. Los widgets son de solo vista (sin pies con
+     botones ni controles que puedan quedar cortados), así que lo que no entra se recorta en vez
+     de abrir scroll: dentro de una tarjeta nunca debería poder deslizarse nada. El tamaño mínimo
+     de cada widget (panel.tsx) ya está pensado para que su contenido quepa siempre. Padding algo
+     menor que fuera del panel: en una celda pequeña esos 4 px por lado son la diferencia entre
+     caber y no caber. */
   .widget-panel {
     @apply relative h-full;
   }
   .widget-panel > .tarjeta {
-    @apply h-full overflow-x-hidden overflow-y-auto p-4;
+    @apply h-full overflow-hidden p-4;
     animation: none; /* la animación de entrada parpadearía en cada arrastre */
-    scrollbar-width: thin;
   }
   /* En edición los botones de esquina van encima de la cabecera; este hueco evita que tapen la
      acción propia de la tarjeta (su interruptor o su botón redondo). */

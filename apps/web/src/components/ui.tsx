@@ -36,17 +36,13 @@ export function Tarjeta({
   );
 }
 
-export function Chip({
-  icono,
-  activo = false,
-  children,
-  ...props
-}: { icono?: ReactNode; activo?: boolean } & ComponentProps<'button'>) {
+/** Píldora de solo información (icono + texto). Las tarjetas del panel son de solo vista. */
+export function Chip({ icono, children, ...props }: { icono?: ReactNode } & ComponentProps<'span'>) {
   return (
-    <button type="button" className={`chip ${activo ? 'chip-activo' : ''}`} aria-pressed={activo} {...props}>
+    <span className={`chip ${icono ? '' : 'pl-4'}`} {...props}>
       {icono && <span className="chip-icono">{icono}</span>}
       {children}
-    </button>
+    </span>
   );
 }
 

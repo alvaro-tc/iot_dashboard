@@ -4,6 +4,7 @@ import { CONFIG_POR_DEFECTO, type EventoRobot } from '@iot/shared';
 import { NOMBRE_EVENTO, haceCuanto } from '../lib/formato.ts';
 import { useEventosRobot, useSocket, useUltimaLectura } from '../lib/socket.tsx';
 import { RadarSensores } from '../components/RadarSensores.tsx';
+import { TarjetaControl } from '../components/TarjetaControl.tsx';
 import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { Tarjeta, Vacio } from '../components/ui.tsx';
 
@@ -18,6 +19,8 @@ export function Mapa() {
       <TarjetaMapa alto="h-[380px] sm:h-[560px]" />
 
       <div className="grid content-start gap-4">
+        <TarjetaControl />
+
         <Tarjeta titulo="Radar" subtitulo="Lo que ven los sensores ahora">
           <div className="h-[240px] overflow-hidden rounded-[1.25rem] bg-[#0f172a]">
             <RadarSensores config={config ?? CONFIG_POR_DEFECTO} lectura={lectura} />

@@ -207,6 +207,7 @@ export function TarjetaSesiones({
                 <button
                   type="button"
                   className="btn btn-sm ml-auto"
+                  aria-label="Volver al mapa en vivo"
                   onClick={() => {
                     setReproduciendo(false);
                     setProgreso(0);

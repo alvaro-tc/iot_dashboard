@@ -306,16 +306,9 @@ export function Panel() {
   const tarjeta = (id: IdTarjeta) => {
     switch (id) {
       case 'mapa':
-        return (
-          <TarjetaMapa
-            vista="mapa"
-            alto="min-h-0 flex-1"
-            repeticion={repeticion}
-            onSalirRepeticion={() => setRepeticion(null)}
-          />
-        );
+        return <TarjetaMapa vista="mapa" alto="min-h-0 flex-1" repeticion={repeticion} soloVista />;
       case 'radar':
-        return <TarjetaMapa vista="radar" alto="min-h-0 flex-1" />;
+        return <TarjetaMapa vista="radar" alto="min-h-0 flex-1" soloVista />;
       case 'sesiones':
         return <TarjetaSesiones repeticion={repeticion} onRepetir={setRepeticion} />;
       case 'estado':

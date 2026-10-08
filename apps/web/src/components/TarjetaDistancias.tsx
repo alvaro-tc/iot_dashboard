@@ -1,23 +1,14 @@
 // "Historial de distancias": equivale a la tarjeta de Bedroom Light de la referencia.
 // Tres series en ventana deslizante alimentadas por WebSocket, con líneas de umbral.
-import { useEffect, useRef, useState } from 'react';
-import { Activity, Clock } from 'lucide-react';
+// Es de solo vista: siempre en vivo, ventana fija de 5 minutos.
+import { useEffect, useRef } from 'react';
 import { CONFIG_POR_DEFECTO, type Lectura, type Movimiento } from '@iot/shared';
-import { api } from '../lib/api.ts';
 import { Chart } from '../lib/chart.ts';
-import { useRobots } from '../lib/robots.tsx';
 import { useSocket, useTelemetria } from '../lib/socket.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
-import type { LecturaAgregada } from '../lib/types.ts';
-import { Chip, Interruptor, Tarjeta } from './ui.tsx';
+import { Tarjeta } from './ui.tsx';
 
-type Ventana = '1min' | '5min' | '1h';
-
-const VENTANAS: Record<Ventana, { texto: string; ms: number }> = {
-  '1min': { texto: '1 min', ms: 60_000 },
-  '5min': { texto: '5 min', ms: 300_000 },
-  '1h': { texto: '1 h', ms: 3_600_000 },
-};
+const VENTANA_MS = 300_000; // 5 minutos
 
 /** Color de la franja de estado de movimiento bajo el eje X. */
 const COLOR_MOVIMIENTO: Record<Movimiento, string> = {
@@ -60,11 +51,8 @@ export function TarjetaDistancias() {
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
   const { config, idConexion, historial } = useSocket();
-  const { robot } = useRobots();
   const cfg = config ?? CONFIG_POR_DEFECTO;
 
-  const [ventana, setVentana] = useState<Ventana>('1min');
-  const [enVivo, setEnVivo] = useState(true);
   const datos = useRef<{ izq: { x: number; y: number }[]; centro: { x: number; y: number }[]; der: { x: number; y: number }[] }>({
     izq: [],
     centro: [],
@@ -84,7 +72,7 @@ export function TarjetaDistancias() {
   };
 
   const podar = () => {
-    const corte = Date.now() - VENTANAS[ventana].ms;
+    const corte = Date.now() - VENTANA_MS;
     for (const k of ['izq', 'centro', 'der'] as const) {
       datos.current[k] = datos.current[k].filter((p) => p.x > corte);
     }
@@ -94,7 +82,6 @@ export function TarjetaDistancias() {
   // Las gráficas de línea se limitan a 10 fps: a 5 Hz por robot y 3 series, redibujar en
   // cada mensaje no aporta nada que el ojo vea.
   useTelemetria((l) => {
-    if (!enVivo || ventana === '1h') return;
     agregar(l);
     if (pendiente.current) return;
     pendiente.current = true;
@@ -105,39 +92,14 @@ export function TarjetaDistancias() {
     }, 100);
   });
 
-  // Al conectar o cambiar de ventana, se siembra con el historial en memoria.
+  // Al conectar, se siembra con el historial en memoria.
   useEffect(() => {
-    if (ventana === '1h') return;
     datos.current = { izq: [], centro: [], der: [] };
     estados.current = [];
     for (const l of historial()) agregar(l);
     podar();
     chartRef.current?.update('none');
-  }, [idConexion, ventana]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Ventana de 1 h: agregado por minuto desde Postgres, no desde el WebSocket.
-  useEffect(() => {
-    if (ventana !== '1h' || !robot) return;
-    let cancelado = false;
-    const desde = new Date(Date.now() - 3_600_000).toISOString();
-    api<LecturaAgregada[]>(`/api/dispositivos/${robot.id}/lecturas?agregacion=minuto&desde=${desde}`)
-      .then((filas) => {
-        if (cancelado) return;
-        datos.current = {
-          izq: filas.map((f) => ({ x: new Date(f.instante).getTime(), y: f.minIzqCm as number })),
-          centro: filas.map((f) => ({ x: new Date(f.instante).getTime(), y: f.minCentroCm as number })),
-          der: filas.map((f) => ({ x: new Date(f.instante).getTime(), y: f.minDerCm as number })),
-        };
-        estados.current = [];
-        chartRef.current?.update('none');
-      })
-      .catch(() => {
-        /* la tarjeta se queda con lo que tenga; el error ya se ve en otras vistas */
-      });
-    return () => {
-      cancelado = true;
-    };
-  }, [ventana, robot?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [idConexion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -180,10 +142,6 @@ export function TarjetaDistancias() {
               title: (items) => new Date(Number(items[0].parsed.x)).toLocaleTimeString('es'),
               label: (item) => `${item.dataset.label}: ${item.parsed.y?.toFixed(1) ?? '—'} cm`,
             },
-          },
-          zoom: {
-            zoom: { wheel: { enabled: true, speed: 0.1 }, pinch: { enabled: true }, mode: 'x' },
-            pan: { enabled: true, mode: 'x' },
           },
           annotation: {
             annotations: {
@@ -238,34 +196,8 @@ export function TarjetaDistancias() {
   }, [colores.tema, cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Tarjeta
-      titulo="Historial de distancias"
-      subtitulo="Lo que mide cada sensor"
-      accion={
-        <div className="flex items-center gap-2">
-          <span className="hidden text-[13px] text-tinta-suave @[22rem]:inline">Seguir en vivo</span>
-          <Interruptor
-            activo={enVivo && ventana !== '1h'}
-            onCambiar={setEnVivo}
-            etiqueta="Seguir en vivo"
-            disabled={ventana === '1h'}
-          />
-        </div>
-      }
-      pie={
-        <>
-          {(['1min', '5min'] as Ventana[]).map((v) => (
-            <Chip key={v} icono={<Activity className="size-3.5" />} activo={ventana === v} onClick={() => setVentana(v)}>
-              {VENTANAS[v].texto}
-            </Chip>
-          ))}
-          <Chip icono={<Clock className="size-3.5" />} activo={ventana === '1h'} onClick={() => setVentana('1h')}>
-            1 h
-          </Chip>
-        </>
-      }
-    >
-      <div className="h-full min-h-[160px]">
+    <Tarjeta titulo="Historial de distancias" subtitulo="Últimos 5 minutos">
+      <div className="h-full">
         <canvas ref={canvasRef} />
       </div>
     </Tarjeta>

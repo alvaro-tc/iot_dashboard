@@ -40,14 +40,16 @@ interface Props {
   vista?: Vista;
   /** Recorrido de una sesión pasada: activa el modo repetición. */
   repeticion?: { nombre: string; poses: Pose[] } | null;
-  onSalirRepeticion?: () => void;
+  /** Widget del panel: sin controles (ni del robot ni de cámara), solo lectura. Los controles
+      reales viven en /mapa, donde la tarjeta sigue completa. */
+  soloVista?: boolean;
 }
 
 export function TarjetaMapa({
   alto = 'h-[300px] sm:h-[380px]',
   vista: vistaFija,
   repeticion = null,
-  onSalirRepeticion,
+  soloVista = false,
 }: Props) {
   const { robot, robots, mover } = useRobots();
   const { config, estadoRobot, estado, enviarComando, historial, idConexion } = useSocket();
@@ -121,36 +123,39 @@ export function TarjetaMapa({
             {robot ? `${robot.nombre}${robot.ubicacion ? ` · ${robot.ubicacion}` : ''}` : 'Sin robot seleccionado'}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {!vistaFija && (
-            <Segmentado
-              etiqueta="Vista"
-              valor={vista}
-              onCambiar={setVistaLibre}
-              opciones={[
-                { valor: 'mapa' as Vista, texto: 'Mapa' },
-                { valor: 'radar' as Vista, texto: 'Radar' },
-              ]}
-            />
-          )}
-          {/* Botón de encendido: alterna automático ↔ detenido */}
-          <button
-            type="button"
-            className={`btn-circulo ${enMarcha ? 'border-acento bg-acento text-white' : ''}`}
-            aria-label={enMarcha ? 'Detener el robot' : 'Iniciar el robot'}
-            aria-busy={!!enviando}
-            disabled={!robot || !!enviando}
-            onClick={() => comando(enMarcha ? 'detener' : 'iniciar')}
-          >
-            <Power className="size-5" />
-          </button>
-        </div>
+        {!soloVista && (
+          <div className="flex shrink-0 items-center gap-2">
+            {!vistaFija && (
+              <Segmentado
+                etiqueta="Vista"
+                valor={vista}
+                onCambiar={setVistaLibre}
+                opciones={[
+                  { valor: 'mapa' as Vista, texto: 'Mapa' },
+                  { valor: 'radar' as Vista, texto: 'Radar' },
+                ]}
+              />
+            )}
+            {/* Botón de encendido: alterna automático ↔ detenido */}
+            <button
+              type="button"
+              className={`btn-circulo ${enMarcha ? 'border-acento bg-acento text-white' : ''}`}
+              aria-label={enMarcha ? 'Detener el robot' : 'Iniciar el robot'}
+              aria-busy={!!enviando}
+              disabled={!robot || !!enviando}
+              onClick={() => comando(enMarcha ? 'detener' : 'iniciar')}
+            >
+              <Power className="size-5" />
+            </button>
+          </div>
+        )}
       </header>
 
       {/* ---- Recuadro oscuro ---- */}
-      {/* El recuadro tiene su propio suelo de alto: en un widget bajo el panel hace scroll
-          en vez de recortar el mapa y sus controles. */}
-      <div className={`relative min-h-[260px] overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${alto}`}>
+      {/* Con controles (/mapa) el recuadro tiene un suelo de alto: por debajo no caben ni se
+          leen. El widget de solo vista del panel no tiene ese suelo: se encoge con la celda en
+          vez de recortarse, que es justo lo que no debe pasar en una tarjeta de solo lectura. */}
+      <div className={`relative overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${soloVista ? 'min-h-0' : 'min-h-[260px]'} ${alto}`}>
         {vista === 'mapa' ? (
           <MapaVivo
             ref={mapa}
@@ -180,7 +185,7 @@ export function TarjetaMapa({
             )}
           </div>
 
-          {robots.length > 0 && !repeticion && (
+          {!soloVista && robots.length > 0 && !repeticion && (
             <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-full bg-white/10 px-1 py-1 backdrop-blur">
               <button
                 type="button"
@@ -208,7 +213,7 @@ export function TarjetaMapa({
         {/* Controles propios de la vista Mapa, bajo el selector. La columna está acotada por
             arriba y por abajo (bottom-16, por encima de la fila inferior) y envuelve: si no caben
             los seis, pasan a una segunda columna a su izquierda en vez de pisar los de abajo. */}
-        {vista === 'mapa' && (
+        {!soloVista && vista === 'mapa' && (
           <div className="absolute top-14 right-3 bottom-16 flex flex-col flex-wrap-reverse content-start gap-1.5">
             <BotonMapa etiqueta="Acercar" onClick={() => mapa.current?.zoom(0.8)}>
               <ZoomIn className="size-4" />
@@ -240,61 +245,64 @@ export function TarjetaMapa({
         )}
 
         {/* Fila inferior de botones circulares */}
-        <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center justify-center gap-2">
-          <BotonMapa
-            etiqueta={enMarcha ? 'Pausar' : 'Iniciar'}
-            disabled={!robot || !!enviando || !!repeticion}
-            onClick={() => comando(enMarcha ? 'pausar' : 'iniciar')}
-          >
-            {enMarcha ? <Pause className="size-4" /> : <Play className="size-4" />}
-          </BotonMapa>
-          <BotonMapa
-            etiqueta="Detener"
-            disabled={!robot || !!enviando || !!repeticion}
-            onClick={() => comando('detener')}
-          >
-            <Square className="size-4" />
-          </BotonMapa>
-          {vista === 'mapa' && (
-            <BotonMapa etiqueta="Captura PNG" onClick={capturar}>
-              <Camera className="size-4" />
+        {!soloVista && (
+          <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center justify-center gap-2">
+            <BotonMapa
+              etiqueta={enMarcha ? 'Pausar' : 'Iniciar'}
+              disabled={!robot || !!enviando || !!repeticion}
+              onClick={() => comando(enMarcha ? 'pausar' : 'iniciar')}
+            >
+              {enMarcha ? <Pause className="size-4" /> : <Play className="size-4" />}
             </BotonMapa>
-          )}
-          {repeticion && onSalirRepeticion && (
-            <button type="button" className="btn btn-sm btn-acento ml-2" onClick={onSalirRepeticion}>
-              Volver a En vivo
-            </button>
-          )}
-        </div>
+            <BotonMapa
+              etiqueta="Detener"
+              disabled={!robot || !!enviando || !!repeticion}
+              onClick={() => comando('detener')}
+            >
+              <Square className="size-4" />
+            </BotonMapa>
+            {vista === 'mapa' && (
+              <BotonMapa etiqueta="Captura PNG" onClick={capturar}>
+                <Camera className="size-4" />
+              </BotonMapa>
+            )}
+          </div>
+        )}
       </div>
 
       {/* ---- Banner de estado y pose ---- */}
-      <p className="mt-3 text-[14px] font-medium" aria-live="polite">
+      <p className="mt-3 truncate text-[14px] font-medium" aria-live="polite">
         {banner}
       </p>
-      {vista === 'mapa' && (
-        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-tinta-suave">
-          <span>
-            Posición <span className="text-tinta tabular-nums">{cm(lectura?.posXCm)}</span>,{' '}
-            <span className="text-tinta tabular-nums">{cm(lectura?.posYCm)}</span>
-          </span>
-          <span>
-            Orientación <span className="text-tinta tabular-nums">{grados(lectura?.orientacionDeg)}</span>
-          </span>
-          <span>
-            Recorrido <span className="text-tinta tabular-nums">{distancia(distanciaDe(historial()))}</span>
-          </span>
-        </div>
-      )}
+      {/* El detalle de pose y la leyenda solo caben (y solo hacen falta) con la tarjeta a tamaño
+          completo en /mapa; el widget de solo vista se queda con el banner. */}
+      {!soloVista && (
+        <>
+          {vista === 'mapa' && (
+            <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-tinta-suave">
+              <span>
+                Posición <span className="text-tinta tabular-nums">{cm(lectura?.posXCm)}</span>,{' '}
+                <span className="text-tinta tabular-nums">{cm(lectura?.posYCm)}</span>
+              </span>
+              <span>
+                Orientación <span className="text-tinta tabular-nums">{grados(lectura?.orientacionDeg)}</span>
+              </span>
+              <span>
+                Recorrido <span className="text-tinta tabular-nums">{distancia(distanciaDe(historial()))}</span>
+              </span>
+            </div>
+          )}
 
-      {/* Leyenda. Los colores de los sensores valen para las dos vistas; la trayectoria solo
-          existe en el mapa. */}
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-tinta-suave">
-        {vista === 'mapa' && <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>}
-        <Leyenda color="var(--color-evasion)">Obstáculo / evasión</Leyenda>
-        <Leyenda color="var(--color-precaucion)">Precaución</Leyenda>
-        <Leyenda color="var(--color-libre)">Libre</Leyenda>
-      </div>
+          {/* Leyenda. Los colores de los sensores valen para las dos vistas; la trayectoria solo
+              existe en el mapa. */}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-tinta-suave">
+            {vista === 'mapa' && <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>}
+            <Leyenda color="var(--color-evasion)">Obstáculo / evasión</Leyenda>
+            <Leyenda color="var(--color-precaucion)">Precaución</Leyenda>
+            <Leyenda color="var(--color-libre)">Libre</Leyenda>
+          </div>
+        </>
+      )}
     </section>
   );
 }
