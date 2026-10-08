@@ -1,6 +1,6 @@
 # Despliegue en un VPS sin Docker
 
-Ubuntu 22.04 o 24.04. Todo nativo: Mosquitto, PostgreSQL, Node.js LTS, pm2, Nginx y Certbot.
+Ubuntu 22.04 o 24.04. Todo nativo: Mosquitto, PostgreSQL, Node.js LTS, pm2 y Caddy (TLS automático, sin Certbot).
 Pensado para un VPS pequeño (1 vCPU, 1–2 GB de RAM).
 
 ## 1. Paquetes
@@ -18,14 +18,22 @@ sudo apt install -y software-properties-common
 sudo add-apt-repository -y ppa:mosquitto-dev/mosquitto-ppa
 sudo apt update && sudo apt install -y mosquitto mosquitto-clients
 
-sudo apt install -y postgresql nginx certbot python3-certbot-nginx git
+sudo apt install -y postgresql git
+
+# Caddy desde su repositorio oficial
+sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
+curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/gpg.key |
+  sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+curl -1sLf https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt |
+  sudo tee /etc/apt/sources.list.d/caddy-stable.list
+sudo apt update && sudo apt install -y caddy
 ```
 
 ## 2. Cortafuegos
 
 ```bash
 sudo ufw allow 22/tcp     # SSH
-sudo ufw allow 80/tcp     # HTTP (Certbot)
+sudo ufw allow 80/tcp     # HTTP (Caddy lo usa para el reto ACME y redirige a HTTPS)
 sudo ufw allow 443/tcp    # HTTPS
 sudo ufw allow 8883/tcp   # MQTT sobre TLS (los robots)
 sudo ufw enable
@@ -93,43 +101,52 @@ Esquema y datos de demo:
 pnpm db:reset
 ```
 
-## 5. Dominio, Nginx y certificado
+## 5. Dominio y Caddy
 
 Apunta un registro **A** de `tu-dominio.com` a la IP del VPS y espera a que propague.
 
-El orden importa: **primero** se instala la configuración de Nginx del repositorio y
-**luego** se pide el certificado, porque `certbot --nginx` edita ese archivo para añadirle el
-bloque TLS. Al revés, el `cp` del paso 7 machacaba lo que escribió Certbot y el sitio se
-quedaba sin HTTPS y sin el proxy de `/socket.io/`.
+Caddy pide y renueva el certificado él solo en cuanto sirve el dominio por primera vez: no
+hay Certbot ni hooks de renovación. Lo único que hay que acertar es el `server_name`
+(la primera línea del Caddyfile) y que los puertos 80 y 443 estén abiertos.
 
 ```bash
-sudo cp /srv/iot/infra/nginx/roomba.conf /etc/nginx/sites-available/roomba
-sudo sed -i 's/tu-dominio.com/TU-DOMINIO-REAL/g' /etc/nginx/sites-available/roomba
-sudo ln -sf /etc/nginx/sites-available/roomba /etc/nginx/sites-enabled/roomba
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
-
-sudo certbot --nginx -d tu-dominio.com
+sudo cp /srv/iot/infra/caddy/Caddyfile /etc/caddy/Caddyfile
+sudo sed -i 's/iot-dashboard.tumype.com/TU-DOMINIO-REAL/' /etc/caddy/Caddyfile
+sudo caddy validate --config /etc/caddy/Caddyfile
+sudo systemctl reload caddy
 ```
 
-Comprueba que el WebSocket queda proxyado (y no servido como `index.html`):
+Los tres bloques del Caddyfile importan y el de `/socket.io/*` es el que suele faltar: sin
+él la petición del WebSocket cae en el `file_server`, el navegador recibe `index.html` en
+vez del handshake y Socket.IO no conecta nunca. Compruébalo:
 
 ```bash
 curl -s "https://tu-dominio.com/socket.io/?EIO=4&transport=polling" | head -c 40
 # 0{"sid":"...   ← bien
-# <!doctype html ← falta el bloque location /socket.io/ en el Nginx instalado
+# <!doctype html ← falta el handle /socket.io/* en el Caddyfile instalado
+
+curl -s https://tu-dominio.com/api/health
+# {"ok":true}
 ```
+
+Si algo falla: `sudo journalctl -u caddy -n 50`.
 
 ## 6. Mosquitto
 
-Copia la configuración del repositorio:
+Copia la configuración del repositorio. El listener 8883 usa el mismo certificado del
+dominio, pero Mosquitto no puede leer el almacén de Caddy, así que un script lo copia a
+`/etc/mosquitto/certs` y recarga el broker. Caddy renueva sin avisar a nadie, por eso el
+script se deja en un cron diario (no hace nada si el certificado no ha cambiado).
 
 ```bash
 sudo cp /srv/iot/infra/mosquitto/roomba.conf /etc/mosquitto/conf.d/
-sudo mkdir -p /etc/mosquitto/certs
-sudo cp /srv/iot/infra/mosquitto/renovar-certs.sh /etc/letsencrypt/renewal-hooks/deploy/
-sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/renovar-certs.sh
-sudo DOMINIO=tu-dominio.com /etc/letsencrypt/renewal-hooks/deploy/renovar-certs.sh
+
+sudo cp /srv/iot/infra/mosquitto/renovar-certs.sh /usr/local/bin/mosquitto-certs
+sudo chmod +x /usr/local/bin/mosquitto-certs
+sudo DOMINIO=tu-dominio.com /usr/local/bin/mosquitto-certs
+echo '17 4 * * * root DOMINIO=tu-dominio.com /usr/local/bin/mosquitto-certs' |
+  sudo tee /etc/cron.d/mosquitto-certs
+
 sudo systemctl restart mosquitto
 ```
 
@@ -147,7 +164,7 @@ sudo ss -tlnp | grep mosquitto
 cd /srv/iot && pnpm --filter @iot/web build
 ```
 
-El Nginx ya quedó instalado en el paso 5; aquí solo se regenera `apps/web/dist`.
+Caddy ya sirve esa carpeta desde el paso 5; aquí solo se regenera `apps/web/dist`.
 
 ## 8. Backend con pm2
 
@@ -166,7 +183,7 @@ curl -s https://tu-dominio.com/api/salud -H "Authorization: Bearer $TOKEN"
 
 pm2 logs iot-api --lines 50
 sudo journalctl -u mosquitto -f
-sudo tail -f /var/log/nginx/error.log
+sudo journalctl -u caddy -f
 ```
 
 Un robot debería poder conectar a `tu-dominio.com:8883` con TLS y su usuario/contraseña.
@@ -214,7 +231,7 @@ tendrían que regenerar credenciales (en la base solo está el hash bcrypt, no e
 |---|---|
 | `[broker] no se pudo sincronizar Mosquitto` | Faltan permisos sobre `passwd`/`acl`, o la regla de sudoers para el reload |
 | El robot conecta pero no publica | Su usuario no está en la ACL: da de baja y vuelve a dar de alta, o reinicia el backend (hace `syncBroker()` al arrancar) |
-| El WebSocket no conecta desde el navegador | El Nginx instalado no tiene el `location /socket.io/` (o le faltan las cabeceras `Upgrade`/`Connection`). Compruébalo con el `curl` del paso 5 |
+| El WebSocket no conecta desde el navegador | Al Caddyfile instalado le falta el `handle /socket.io/*`, así que esa ruta la responde el `file_server` con `index.html`. Compruébalo con el `curl` del paso 5 |
 | `500` en cualquier cosa de robots, pero login y `/api/health` van bien | El esquema de la base está atrasado (p. ej. no existe la tabla `dispositivos`). Mira `\dt` en `psql` y aplica `pnpm db:reset` |
 | Latencia alta y a saltos | El reloj del ESP32 no está sincronizado por NTP: `t` viene mal y la latencia medida es basura |
 | `ECONNREFUSED` al arrancar la API | Postgres no está levantado o `DATABASE_URL` apunta a otro puerto |

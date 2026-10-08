@@ -1,0 +1,37 @@
+# /etc/caddy/Caddyfile
+#
+# Caddy hace tres cosas: TLS automático (sin Certbot), servir el frontend compilado y
+# hacer de proxy a la API y al WebSocket. `reverse_proxy` ya reenvía Upgrade/Connection,
+# así que el WebSocket no necesita configuración extra como en Nginx.
+#
+# Cambia el dominio por el tuyo. Después: `caddy validate --config /etc/caddy/Caddyfile`
+# y `systemctl reload caddy`.
+
+iot-dashboard.tumype.com {
+	encode zstd gzip
+
+	# API REST y Socket.IO al backend (puerto 4000).
+	#
+	# El WebSocket necesita SU PROPIO bloque: sin él la petición cae en el file_server y
+	# el navegador recibe index.html en vez del handshake, con lo que Socket.IO no conecta.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:4000
+	}
+	handle /socket.io/* {
+		reverse_proxy 127.0.0.1:4000
+	}
+
+	# Frontend compilado.
+	handle {
+		root * /srv/iot/apps/web/dist
+
+		# Los assets de Vite llevan hash en el nombre: cachearlos un año es seguro.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		# React Router: cualquier ruta que no sea un archivo cae en index.html.
+		# Sin esto, recargar en /sesiones da un 404.
+		try_files {path} /index.html
+		file_server
+	}
+}

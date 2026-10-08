@@ -82,7 +82,7 @@ apps/web/        Dashboard: React + Vite + Tailwind + Chart.js
 packages/shared/ Contratos MQTT, geometría del robot y motor de simulación
 simulador/       Robot simulado que publica por MQTT igual que el ESP32
 firmware/        MicroPython para el ESP32
-infra/           Configuración del VPS: Mosquitto, Nginx, pm2, instalar.sh
+infra/           Configuración del VPS: Mosquitto, Caddy, pm2, instalar.sh
 mosquitto/       Configuración de Mosquitto para desarrollo local
 docs/            Circuito, diagrama ER, API, tópicos MQTT y despliegue
 ```

@@ -1,28 +1,42 @@
 #!/bin/bash
-# Hook de Certbot: copia los certificados renovados a donde Mosquitto puede leerlos y lo
-# recarga.
+# Copia el certificado que gestiona Caddy a donde Mosquitto puede leerlo y lo recarga.
 #
-# Mosquitto corre como el usuario `mosquitto`, que NO tiene permiso sobre
-# /etc/letsencrypt/live. Por eso se copian en vez de enlazarlos.
+# Por qué existe: el listener 8883 necesita el mismo certificado del dominio, pero Mosquitto
+# corre como el usuario `mosquitto`, que no tiene permiso sobre el almacén de Caddy
+# (/var/lib/caddy/...). Por eso se copia en vez de enlazarlo.
+#
+# Caddy renueva solo, sin hooks. Este script se ejecuta a diario por cron y no hace nada si
+# el certificado no ha cambiado.
 #
 # Instalación:
-#   sudo cp renovar-certs.sh /etc/letsencrypt/renewal-hooks/deploy/
-#   sudo chmod +x /etc/letsencrypt/renewal-hooks/deploy/renovar-certs.sh
-#   sudo DOMINIO=tu-dominio.com /etc/letsencrypt/renewal-hooks/deploy/renovar-certs.sh
+#   sudo cp renovar-certs.sh /usr/local/bin/mosquitto-certs
+#   sudo chmod +x /usr/local/bin/mosquitto-certs
+#   sudo DOMINIO=tu-dominio.com /usr/local/bin/mosquitto-certs
+#   echo '17 4 * * * DOMINIO=tu-dominio.com /usr/local/bin/mosquitto-certs' | sudo tee /etc/cron.d/mosquitto-certs
 set -euo pipefail
 
-DOMINIO="${DOMINIO:-${RENEWED_DOMAINS%% *}}"
+DOMINIO="${DOMINIO:-}"
 if [ -z "$DOMINIO" ]; then
   echo "No sé para qué dominio: define DOMINIO=tu-dominio.com" >&2
   exit 1
 fi
 
-ORIGEN="/etc/letsencrypt/live/$DOMINIO"
-DESTINO="/etc/mosquitto/certs"
+# La ruta incluye la CA que emitió el certificado, que puede cambiar: se busca.
+BASE=/var/lib/caddy/.local/share/caddy/certificates
+CRT=$(find "$BASE" -type f -name "$DOMINIO.crt" 2>/dev/null | head -1)
+if [ -z "$CRT" ]; then
+  echo "No encuentro el certificado de $DOMINIO en $BASE. ¿Ya lo emitió Caddy?" >&2
+  exit 1
+fi
 
+DESTINO=/etc/mosquitto/certs
 install -d -o mosquitto -g mosquitto -m 750 "$DESTINO"
-install -o mosquitto -g mosquitto -m 644 "$ORIGEN/fullchain.pem" "$DESTINO/fullchain.pem"
-install -o mosquitto -g mosquitto -m 600 "$ORIGEN/privkey.pem"   "$DESTINO/privkey.pem"
+# El .crt de Caddy ya es la cadena completa (hoja + intermedios).
+if cmp -s "$CRT" "$DESTINO/fullchain.pem"; then
+  exit 0
+fi
+install -o mosquitto -g mosquitto -m 644 "$CRT" "$DESTINO/fullchain.pem"
+install -o mosquitto -g mosquitto -m 600 "${CRT%.crt}.key" "$DESTINO/privkey.pem"
 
 systemctl reload mosquitto
-echo "Certificados de $DOMINIO copiados y Mosquitto recargado."
+echo "Certificado de $DOMINIO copiado y Mosquitto recargado."
