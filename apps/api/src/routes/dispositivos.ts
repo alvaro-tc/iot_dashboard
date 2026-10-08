@@ -34,7 +34,7 @@ const ubicacionSchema = z.string().trim().max(60, 'La ubicación no puede supera
 
 function infoBroker() {
   const url = new URL(env.MQTT_URL);
-  return { host: env.MQTT_PUBLIC_HOST || url.hostname, port: Number(url.port || 1883) };
+  return { host: env.MQTT_PUBLIC_HOST || url.hostname, port: env.MQTT_PUBLIC_PORT ?? Number(url.port || 1883) };
 }
 
 /** Comprueba que el robot existe y es del usuario (o que quien pregunta es admin). */

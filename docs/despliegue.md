@@ -71,9 +71,10 @@ MQTT_URL=mqtt://localhost:1883
 MQTT_ADMIN_USER=iot-backend
 MQTT_ADMIN_PASS=otra-clave-larga-distinta
 MQTT_PUBLIC_HOST=tu-dominio.com
+MQTT_PUBLIC_PORT=8883
 MOSQUITTO_PASSWD_PATH=/etc/mosquitto/passwd
 MOSQUITTO_ACL_PATH=/etc/mosquitto/acl
-MOSQUITTO_RELOAD_CMD=sudo systemctl reload mosquitto
+MOSQUITTO_RELOAD_CMD=sudo -n systemctl reload mosquitto
 JWT_SECRET=genera-uno-con-openssl-rand-base64-48
 PORT=4000
 VITE_API_URL=https://tu-dominio.com
@@ -91,7 +92,7 @@ sudo chown $USER /etc/mosquitto/passwd /etc/mosquitto/acl
 sudo chmod 600 /etc/mosquitto/passwd
 
 # Permitir el reload sin contraseña, y solo ese comando
-echo "$USER ALL=(root) NOPASSWD: /bin/systemctl reload mosquitto" | \
+echo "$USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload mosquitto, /bin/systemctl reload mosquitto" | \
   sudo tee /etc/sudoers.d/mosquitto-reload
 ```
 

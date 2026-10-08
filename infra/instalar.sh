@@ -59,7 +59,7 @@ touch /etc/mosquitto/passwd /etc/mosquitto/acl
 chown "$USUARIO" /etc/mosquitto/passwd /etc/mosquitto/acl
 chmod 600 /etc/mosquitto/passwd
 # Solo este comando, sin contraseña: el backend recarga Mosquitto al vincular o revocar.
-echo "$USUARIO ALL=(root) NOPASSWD: /bin/systemctl reload mosquitto" > /etc/sudoers.d/mosquitto-reload
+echo "$USUARIO ALL=(root) NOPASSWD: /usr/bin/systemctl reload mosquitto, /bin/systemctl reload mosquitto" > /etc/sudoers.d/mosquitto-reload
 chmod 440 /etc/sudoers.d/mosquitto-reload
 
 echo "==> Carpeta de logs"

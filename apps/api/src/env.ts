@@ -13,6 +13,9 @@ const schema = z.object({
   MQTT_ADMIN_USER: z.string().default('iot-backend'),
   MQTT_ADMIN_PASS: z.string().min(1),
   MQTT_PUBLIC_HOST: z.string().optional(),
+  // Puerto que se le da al robot. En el VPS es el 8883 (TLS), no el de MQTT_URL, que es
+  // el 1883 local por el que habla el backend y no escucha de cara a internet.
+  MQTT_PUBLIC_PORT: z.coerce.number().optional(),
   MOSQUITTO_PASSWD_PATH: z.string().default('./mosquitto/passwd'),
   MOSQUITTO_ACL_PATH: z.string().default('./mosquitto/acl'),
   // Comando que recarga passwd/acl en Mosquitto. En Windows: `powershell -Command "Restart-Service mosquitto"`.
