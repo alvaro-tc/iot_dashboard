@@ -21,6 +21,10 @@ export const ALTO_FILA = 40;
 export const MARGEN = 16;
 /** Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. */
 export const ANCHO_GRILLA = 1024;
+/** Ancho del cajón de widgets del modo edición. La grilla cede ese espacio y se encoge. */
+export const ANCHO_LATERAL = 288;
+/** Umbral de la grilla ya encogida: en edición entra el cajón sin colapsar a una columna. */
+export const ANCHO_GRILLA_EDICION = ANCHO_GRILLA - ANCHO_LATERAL - MARGEN;
 
 /** `caja` es la posición por defecto; `min` el tamaño por debajo del cual la tarjeta no se lee. */
 export const TARJETAS_PANEL = [
@@ -31,6 +35,18 @@ export const TARJETAS_PANEL = [
   { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
   { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
   { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
+] as const;
+
+/** Presets del diálogo de edición de un widget: columnas y filas, acotados por su mínimo. */
+export const ANCHOS = [
+  { valor: 8, texto: 'Tercio' },
+  { valor: 12, texto: 'Mitad' },
+  { valor: 24, texto: 'Completo' },
+] as const;
+export const ALTOS = [
+  { valor: 6, texto: 'Bajo' },
+  { valor: 9, texto: 'Medio' },
+  { valor: 13, texto: 'Alto' },
 ] as const;
 
 export type IdTarjeta = (typeof TARJETAS_PANEL)[number]['id'];
@@ -88,6 +104,8 @@ interface ValorPanel {
   layout: Layout;
   guardarLayout: (l: Layout) => void;
   restablecerDisposicion: () => void;
+  /** Cambia el tamaño de una tarjeta desde el diálogo de edición, respetando su mínimo. */
+  fijarTamano: (id: IdTarjeta, w: number, h: number) => void;
   /** Hay posiciones guardadas distintas de las de fábrica. */
   disposicionTocada: boolean;
 }
@@ -100,6 +118,7 @@ const Contexto = createContext<ValorPanel>({
   layout: [],
   guardarLayout: () => {},
   restablecerDisposicion: () => {},
+  fijarTamano: () => {},
   disposicionTocada: false,
 });
 export const usePanelTarjetas = () => useContext(Contexto);
@@ -124,6 +143,15 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   );
   const restablecer = useCallback(() => setVisibles(TODAS), []);
   const restablecerDisposicion = useCallback(() => setCajas({}), []);
+
+  const fijarTamano = useCallback((id: IdTarjeta, w: number, h: number) => {
+    const min = TARJETAS_PANEL.find((t) => t.id === id)!.min;
+    setCajas((prev) => {
+      const c = prev[id] ?? POR_DEFECTO[id];
+      const ancho = Math.min(COLUMNAS, Math.max(min.w, w));
+      return { ...prev, [id]: { ...c, x: Math.min(c.x, COLUMNAS - ancho), w: ancho, h: Math.max(min.h, h) } };
+    });
+  }, []);
 
   const layout = useMemo<Layout>(
     () =>
@@ -162,6 +190,7 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
         layout,
         guardarLayout,
         restablecerDisposicion,
+        fijarTamano,
         disposicionTocada: Object.keys(cajas).length > 0,
       }}
     >

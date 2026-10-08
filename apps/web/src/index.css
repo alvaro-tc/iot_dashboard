@@ -197,6 +197,23 @@ body {
   .velo-editar {
     @apply absolute inset-0 z-10 cursor-move rounded-[var(--radius-tarjeta)] bg-acento/5 ring-2 ring-acento/40;
   }
+  /* Controles de esquina del widget en edición, al estilo del escritorio de Android: por encima
+     del velo (z-10) y asomando fuera de la tarjeta para no tapar su contenido. */
+  .acciones-widget {
+    @apply absolute -top-2 -right-2 z-20 flex items-center gap-1;
+  }
+  .boton-widget {
+    @apply inline-flex size-7 cursor-pointer items-center justify-center rounded-full border border-borde bg-tarjeta text-tinta-suave shadow-md transition-colors duration-150;
+  }
+  .boton-widget:hover {
+    @apply border-acento text-acento;
+  }
+  .boton-widget-quitar {
+    @apply border-transparent bg-evasion text-white;
+  }
+  .boton-widget-quitar:hover {
+    @apply border-transparent bg-evasion text-white opacity-80;
+  }
   /* Por encima del velo (z-10), o el velo se queda también con los tiradores. */
   .react-grid-item > .react-resizable-handle {
     z-index: 20;

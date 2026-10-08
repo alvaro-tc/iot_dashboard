@@ -4,14 +4,22 @@
 // El arrastre y los tiradores solo se activan en "modo edición": las tarjetas tienen dentro
 // mapas con pan y gráficas con zoom, y si el arrastre estuviera siempre activo pelearían por
 // el mismo gesto. En modo edición un velo encima de cada tarjeta se queda con el ratón.
+//
+// Al entrar en edición la grilla cede ANCHO_LATERAL al cajón de widgets: al medir menos ancho
+// las tarjetas se encogen solas (la grilla es proporcional), igual que en un escritorio móvil.
+// Cada widget saca entonces sus controles de esquina: lápiz para su tamaño y cruz para quitarlo.
 import React, { useState } from 'react';
-import { Check, LayoutGrid, Move, Plus, RotateCcw } from 'lucide-react';
+import { Check, LayoutGrid, Pencil, Plus, RotateCcw, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
 import { api } from '../lib/api.ts';
 import {
   ALTO_FILA,
+  ALTOS,
   ANCHO_GRILLA,
+  ANCHO_GRILLA_EDICION,
+  ANCHO_LATERAL,
+  ANCHOS,
   COLUMNAS,
   MARGEN,
   TARJETAS_PANEL,
@@ -29,46 +37,106 @@ import { TarjetaEstado } from '../components/TarjetaEstado.tsx';
 import { TarjetaEvasion } from '../components/TarjetaEvasion.tsx';
 import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { TarjetaSesiones, type EstadoRepeticion } from '../components/TarjetaSesiones.tsx';
-import { ErrorConReintento, Esqueleto, Interruptor, Modal, Vacio } from '../components/ui.tsx';
+import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
 
-/** Elige qué tarjetas se ven. El cambio se aplica al momento: el panel lee el contexto. */
-function DialogoPersonalizar({ onCerrar }: { onCerrar: () => void }) {
+/**
+ * Cajón de widgets del modo edición: arriba los que no están en el panel, para añadirlos de un
+ * toque, y abajo los que sí. Es el mismo contenido en el lateral (escritorio) y en el modal
+ * (pantalla estrecha, donde la grilla es de una columna y no hay nada que colocar).
+ */
+function CajonWidgets() {
   const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles } = usePanelTarjetas();
+  const fuera = TARJETAS_PANEL.filter((t) => !ve(t.id));
   return (
-    <Modal etiqueta="Personalizar panel" ancho="max-w-sm" onCerrar={onCerrar}>
-      <h2 className="tarjeta-titulo mb-1">Personalizar panel</h2>
-      <p className="tarjeta-sub mb-5">
-        Elige qué tarjetas quieres ver. Para moverlas o cambiarlas de tamaño usa «Mover». Se guarda en este
-        navegador.
+    <>
+      <p className="tarjeta-sub mb-3">
+        Toca un widget para añadirlo o quitarlo. Arrástralos en el panel para colocarlos y tira del borde o de
+        la esquina para cambiar su tamaño. Se guarda en este navegador.
+      </p>
+      <p className="mb-2 text-[12px] font-semibold tracking-wide text-tinta-suave uppercase">
+        {fuera.length ? 'Para añadir' : 'En el panel'}
       </p>
       <ul className="space-y-1">
-        {TARJETAS_PANEL.map(({ id, texto, Icono }) => (
-          <li key={id} className="flex items-center justify-between gap-4 rounded-2xl px-1 py-2">
-            <span className="flex min-w-0 items-center gap-3">
+        {(fuera.length ? fuera : TARJETAS_PANEL).map(({ id, texto, Icono }) => (
+          <li key={id}>
+            <button
+              type="button"
+              className="chip w-full justify-start"
+              onClick={() => alternar(id)}
+              aria-label={`${ve(id) ? 'Quitar' : 'Añadir'} ${texto}`}
+            >
               <span className="chip-icono">
                 <Icono className="size-3.5" />
               </span>
-              <span className="truncate text-[14px] font-medium">{texto}</span>
-            </span>
-            <Interruptor activo={ve(id)} onCambiar={() => alternar(id)} etiqueta={`Mostrar ${texto}`} />
+              <span className="min-w-0 flex-1 truncate text-left">{texto}</span>
+              {ve(id) ? <X className="size-4 shrink-0 opacity-60" /> : <Plus className="size-4 shrink-0" />}
+            </button>
           </li>
         ))}
       </ul>
-      {!visibles.length && <p className="mt-4 text-[13px] text-precaucion">Sin tarjetas el panel queda vacío.</p>}
-      <div className="mt-6 grid gap-2">
-        <div className="flex gap-2">
-          <button type="button" className="btn flex-1" onClick={restablecer}>
-            Mostrar todas
-          </button>
-          <button type="button" className="btn flex-1" onClick={restablecerDisposicion} disabled={!disposicionTocada}>
-            <RotateCcw className="size-4" />
-            Disposición original
-          </button>
-        </div>
-        <button type="button" className="btn btn-acento" onClick={onCerrar}>
-          Listo
+      {!!fuera.length && !!visibles.length && (
+        <p className="mt-3 text-[12px] text-tinta-suave">
+          {visibles.length} widget{visibles.length === 1 ? '' : 's'} en el panel.
+        </p>
+      )}
+      {!visibles.length && <p className="mt-3 text-[13px] text-precaucion">Sin widgets el panel queda vacío.</p>}
+      <div className="mt-5 flex gap-2">
+        <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={!fuera.length}>
+          Añadir todos
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm flex-1"
+          onClick={restablecerDisposicion}
+          disabled={!disposicionTocada}
+        >
+          <RotateCcw className="size-4" />
+          Original
         </button>
       </div>
+    </>
+  );
+}
+
+/** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
+function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
+  const { layout, fijarTamano } = usePanelTarjetas();
+  const { texto, min } = TARJETAS_PANEL.find((t) => t.id === id)!;
+  const caja = layout.find((l) => l.i === id);
+  const w = caja?.w ?? min.w;
+  const h = caja?.h ?? min.h;
+  /** Preset activo: el más cercano, para que el segmentado no quede siempre en blanco. */
+  const cerca = (opts: readonly { valor: number }[], v: number) =>
+    opts.reduce((a, b) => (Math.abs(b.valor - v) < Math.abs(a.valor - v) ? b : a)).valor;
+  return (
+    <Modal etiqueta={`Editar ${texto}`} ancho="max-w-xs" onCerrar={onCerrar}>
+      <h2 className="tarjeta-titulo mb-1">{texto}</h2>
+      <p className="tarjeta-sub mb-5">
+        Tamaño en la grilla. Mínimo {min.w} de ancho y {min.h} de alto para que siga legible.
+      </p>
+      <div className="space-y-4">
+        <div>
+          <span className="etiqueta">Ancho</span>
+          <Segmentado
+            etiqueta="Ancho del widget"
+            valor={String(cerca(ANCHOS, w))}
+            onCambiar={(v) => fijarTamano(id, Number(v), h)}
+            opciones={ANCHOS.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
+          />
+        </div>
+        <div>
+          <span className="etiqueta">Alto</span>
+          <Segmentado
+            etiqueta="Alto del widget"
+            valor={String(cerca(ALTOS, h))}
+            onCambiar={(v) => fijarTamano(id, w, Number(v))}
+            opciones={ALTOS.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
+          />
+        </div>
+      </div>
+      <button type="button" className="btn btn-acento mt-6 w-full" onClick={onCerrar}>
+        Listo
+      </button>
     </Modal>
   );
 }
@@ -76,11 +144,11 @@ function DialogoPersonalizar({ onCerrar }: { onCerrar: () => void }) {
 export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
   const { robotId } = useSocket();
-  const { layout, guardarLayout } = usePanelTarjetas();
+  const { layout, guardarLayout, alternar } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
   const [nuevoRobot, setNuevoRobot] = useState(false);
-  const [personalizar, setPersonalizar] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [widget, setWidget] = useState<IdTarjeta | null>(null);
   const [repeticion, setRepeticion] = useState<EstadoRepeticion | null>(null);
 
   const { data: resumen } = useQuery<Resumen>({
@@ -156,57 +224,96 @@ export function Panel() {
     }
   };
 
-  // En una sola columna no hay nada que reordenar: los tiradores solo estorbarían.
-  const puedeEditar = width >= ANCHO_GRILLA;
-  const edicionActiva = editando && puedeEditar;
+  // En una sola columna no hay nada que reordenar: los tiradores solo estorbarían. El umbral se
+  // mide sobre el ancho SIN cajón: si no, abrirlo encogería la grilla por debajo del umbral, eso
+  // cerraría el modo edición, la grilla volvería a crecer... y el panel entraría en bucle.
+  const anchoTotal = editando ? width + ANCHO_LATERAL + MARGEN : width;
+  const puedeColocar = anchoTotal >= ANCHO_GRILLA;
+  const edicionActiva = editando && puedeColocar;
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-end gap-2">
         {edicionActiva && (
           <p className="mr-auto text-[13px] text-tinta-suave">
-            Arrastra las tarjetas para colocarlas y tira del borde o de la esquina para cambiar su tamaño.
+            Modo edición: arrastra los widgets, tira del borde para cambiarlos de tamaño y usa los botones de
+            cada esquina para editarlo o quitarlo.
           </p>
         )}
-        {puedeEditar && (
-          <button
-            type="button"
-            className={`btn btn-sm ${editando ? 'btn-acento' : ''}`}
-            aria-pressed={editando}
-            onClick={() => setEditando((v) => !v)}
-          >
-            {editando ? <Check className="size-4" /> : <Move className="size-4" />}
-            {editando ? 'Listo' : 'Mover'}
-          </button>
-        )}
-        <button type="button" className="btn btn-sm" onClick={() => setPersonalizar(true)}>
-          <LayoutGrid className="size-4" />
-          Personalizar
+        <button
+          type="button"
+          className={`btn btn-sm ${editando ? 'btn-acento' : ''}`}
+          aria-pressed={editando}
+          onClick={() => setEditando((v) => !v)}
+        >
+          {editando ? <Check className="size-4" /> : <LayoutGrid className="size-4" />}
+          {editando ? 'Listo' : 'Editar panel'}
         </button>
       </div>
 
-      <div ref={containerRef as React.RefObject<HTMLDivElement>}>
-        {mounted && layout.length > 0 && (
-          <ResponsiveGridLayout
-            width={width}
-            className={edicionActiva ? 'panel-editando' : undefined}
-            layouts={{ grande: layout }}
-            breakpoints={{ grande: ANCHO_GRILLA, chico: 0 }}
-            cols={{ grande: COLUMNAS, chico: 1 }}
-            rowHeight={ALTO_FILA}
-            margin={[MARGEN, MARGEN]}
-            containerPadding={[0, 0]}
-            dragConfig={{ enabled: edicionActiva }}
-            resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
-            onLayoutChange={(_actual, todos) => guardarLayout(todos.grande ?? [])}
+      <div className={edicionActiva ? 'flex items-start gap-4' : undefined}>
+        <div ref={containerRef as React.RefObject<HTMLDivElement>} className="min-w-0 flex-1">
+          {mounted && layout.length > 0 && (
+            <ResponsiveGridLayout
+              width={width}
+              className={edicionActiva ? 'panel-editando' : undefined}
+              layouts={{ grande: layout }}
+              breakpoints={{ grande: edicionActiva ? ANCHO_GRILLA_EDICION : ANCHO_GRILLA, chico: 0 }}
+              cols={{ grande: COLUMNAS, chico: 1 }}
+              rowHeight={ALTO_FILA}
+              margin={[MARGEN, MARGEN]}
+              containerPadding={[0, 0]}
+              dragConfig={{ enabled: edicionActiva }}
+              resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
+              onLayoutChange={(_actual, todos) => guardarLayout(todos.grande ?? [])}
+            >
+              {layout.map(({ i }) => {
+                const id = i as IdTarjeta;
+                const texto = TARJETAS_PANEL.find((t) => t.id === id)?.texto ?? id;
+                return (
+                  <div key={i} className="widget-panel">
+                    {tarjeta(id)}
+                    {edicionActiva && (
+                      <>
+                        <div className="velo-editar" aria-hidden />
+                        <div className="acciones-widget">
+                          <button
+                            type="button"
+                            className="boton-widget"
+                            aria-label={`Editar ${texto}`}
+                            title={`Editar ${texto}`}
+                            onClick={() => setWidget(id)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            className="boton-widget boton-widget-quitar"
+                            aria-label={`Quitar ${texto}`}
+                            title={`Quitar ${texto}`}
+                            onClick={() => alternar(id)}
+                          >
+                            <X className="size-4" />
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </ResponsiveGridLayout>
+          )}
+        </div>
+
+        {edicionActiva && (
+          <aside
+            aria-label="Widgets"
+            className="tarjeta sticky top-4 max-h-[calc(100dvh-6rem)] shrink-0 overflow-y-auto"
+            style={{ width: ANCHO_LATERAL }}
           >
-            {layout.map(({ i }) => (
-              <div key={i} className="widget-panel">
-                {tarjeta(i as IdTarjeta)}
-                {edicionActiva && <div className="velo-editar" aria-hidden />}
-              </div>
-            ))}
-          </ResponsiveGridLayout>
+            <h2 className="tarjeta-titulo mb-1">Widgets</h2>
+            <CajonWidgets />
+          </aside>
         )}
       </div>
 
@@ -214,10 +321,11 @@ export function Panel() {
         <div className="tarjeta">
           <Vacio
             titulo="Panel vacío"
-            descripcion="Has ocultado todas las tarjetas."
+            descripcion="Has quitado todos los widgets."
             accion={
-              <button type="button" className="btn btn-acento" onClick={() => setPersonalizar(true)}>
-                Personalizar
+              <button type="button" className="btn btn-acento" onClick={() => setEditando(true)}>
+                <LayoutGrid className="size-4" />
+                Editar panel
               </button>
             }
           />
@@ -232,7 +340,17 @@ export function Panel() {
       )}
 
       {nuevoRobot && <DialogoNuevoRobot onCerrar={() => setNuevoRobot(false)} />}
-      {personalizar && <DialogoPersonalizar onCerrar={() => setPersonalizar(false)} />}
+      {widget && <DialogoWidget id={widget} onCerrar={() => setWidget(null)} />}
+      {/* Pantalla estrecha: no hay dónde colocar, pero sí qué mostrar y qué ocultar. */}
+      {editando && !puedeColocar && (
+        <Modal etiqueta="Widgets" ancho="max-w-sm" onCerrar={() => setEditando(false)}>
+          <h2 className="tarjeta-titulo mb-1">Widgets</h2>
+          <CajonWidgets />
+          <button type="button" className="btn btn-acento mt-3 w-full" onClick={() => setEditando(false)}>
+            Listo
+          </button>
+        </Modal>
+      )}
     </div>
   );
 }
