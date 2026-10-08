@@ -1,4 +1,5 @@
 // Primitivos del sistema de diseño: tarjeta con encabezado, interruptor, chips, badges.
+import { useEffect, useRef } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 export function Tarjeta({
@@ -195,5 +196,42 @@ export function Segmentado<T extends string>({
         );
       })}
     </div>
+  );
+}
+
+/**
+ * Modal sobre <dialog> nativo: Escape, backdrop y foco los gestiona el navegador.
+ * El clic en el propio <dialog> es el del backdrop (el contenido va en un hijo).
+ */
+export function Modal({
+  etiqueta,
+  onCerrar,
+  ancho = 'max-w-md',
+  children,
+}: {
+  etiqueta: string;
+  onCerrar: () => void;
+  ancho?: string;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  // El guard es por StrictMode, que monta el efecto dos veces: showModal() sobre un
+  // <dialog> ya abierto lanza InvalidStateError.
+  useEffect(() => {
+    if (!ref.current?.open) ref.current?.showModal();
+  }, []);
+  return (
+    <dialog
+      ref={ref}
+      aria-label={etiqueta}
+      onCancel={(e) => {
+        e.preventDefault(); // cerramos nosotros para que el estado de React quede al día
+        onCerrar();
+      }}
+      onClick={(e) => e.target === ref.current && onCerrar()}
+      className={`tarjeta m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-y-auto ${ancho} backdrop:bg-black/40`}
+    >
+      {children}
+    </dialog>
   );
 }

@@ -4,10 +4,11 @@ import { KeyRound, Plus, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, api, errorMessage } from '../../lib/api.ts';
 import { useAuth } from '../../lib/auth.tsx';
+import { useConfirmar } from '../../lib/confirmar.tsx';
 import { haceCuanto } from '../../lib/formato.ts';
 import { useToast } from '../../lib/toast.tsx';
 import type { AdminUserRow } from '../../lib/types.ts';
-import { Badge, Esqueleto, Interruptor, Tarjeta } from '../../components/ui.tsx';
+import { Badge, Esqueleto, Interruptor, Modal, Tarjeta } from '../../components/ui.tsx';
 
 function DialogoNuevoUsuario({ onCerrar }: { onCerrar: () => void }) {
   const qc = useQueryClient();
@@ -32,10 +33,8 @@ function DialogoNuevoUsuario({ onCerrar }: { onCerrar: () => void }) {
     setForm({ ...form, [k]: e.target.value });
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onCerrar}>
+    <Modal etiqueta="Nuevo usuario" ancho="max-w-sm" onCerrar={onCerrar}>
       <form
-        className="tarjeta w-full max-w-sm"
-        onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           setErrores({});
@@ -75,7 +74,7 @@ function DialogoNuevoUsuario({ onCerrar }: { onCerrar: () => void }) {
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -83,6 +82,7 @@ export function Usuarios() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [nuevo, setNuevo] = useState(false);
 
   const { data, isLoading } = useQuery<AdminUserRow[]>({
@@ -178,10 +178,14 @@ export function Usuarios() {
                         aria-label={`Eliminar a ${u.name}`}
                         title="Eliminar"
                         disabled={u.id === user!.id}
-                        onClick={() => {
-                          if (confirm(`¿Eliminar a ${u.name}? Se borran sus robots y todo su historial.`)) {
-                            borrar.mutate(u.id);
-                          }
+                        onClick={async () => {
+                          const ok = await confirmar({
+                            titulo: `¿Eliminar a ${u.name}?`,
+                            mensaje: 'Se borran su cuenta, sus robots y todo su historial. No se puede deshacer.',
+                            confirmar: 'Eliminar',
+                            destructivo: true,
+                          });
+                          if (ok) borrar.mutate(u.id);
                         }}
                       >
                         <Trash2 className="size-4" />

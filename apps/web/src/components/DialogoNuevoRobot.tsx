@@ -6,6 +6,7 @@ import { ApiError, api, errorMessage } from '../lib/api.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useToast } from '../lib/toast.tsx';
 import type { AltaDispositivo } from '../lib/types.ts';
+import { Modal } from './ui.tsx';
 
 function Copiable({ etiqueta, valor, multilinea = false }: { etiqueta: string; valor: string; multilinea?: boolean }) {
   const [copiado, setCopiado] = useState(false);
@@ -77,15 +78,8 @@ MQTT_PASS   = "${alta.token}"`
     : '';
 
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center overflow-y-auto bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Agregar robot"
-      onClick={onCerrar}
-    >
-      <div className="tarjeta w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        {!alta ? (
+    <Modal etiqueta="Agregar robot" ancho="max-w-lg" onCerrar={onCerrar}>
+      {!alta ? (
           <form onSubmit={crear} noValidate>
             <h2 className="tarjeta-titulo mb-1">Agregar robot</h2>
             <p className="tarjeta-sub mb-5">Se generan sus credenciales MQTT y se registran en el broker.</p>
@@ -141,8 +135,7 @@ MQTT_PASS   = "${alta.token}"`
               Ya la copié
             </button>
           </div>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

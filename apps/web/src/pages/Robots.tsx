@@ -3,13 +3,14 @@ import { useState } from 'react';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../lib/api.ts';
+import { useConfirmar } from '../lib/confirmar.tsx';
 import { haceCuanto, pct } from '../lib/formato.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useSocket } from '../lib/socket.tsx';
 import { useToast } from '../lib/toast.tsx';
 import type { Dispositivo } from '../lib/types.ts';
 import { DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
-import { Badge, Esqueleto, Tarjeta, Vacio } from '../components/ui.tsx';
+import { Badge, Esqueleto, Modal, Tarjeta, Vacio } from '../components/ui.tsx';
 
 function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () => void }) {
   const { recargar } = useRobots();
@@ -28,10 +29,8 @@ function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =
   });
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onCerrar}>
+    <Modal etiqueta="Editar robot" ancho="max-w-sm" onCerrar={onCerrar}>
       <form
-        className="tarjeta w-full max-w-sm"
-        onClick={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault();
           guardar.mutate();
@@ -55,7 +54,7 @@ function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =
           </button>
         </div>
       </form>
-    </div>
+    </Modal>
   );
 }
 
@@ -70,49 +69,47 @@ function DialogoClave({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =>
   });
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4" role="dialog" aria-modal="true" onClick={onCerrar}>
-      <div className="tarjeta w-full max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h2 className="tarjeta-titulo mb-1">Regenerar credenciales</h2>
-        {!token ? (
-          <>
-            <p className="tarjeta-sub mb-5">
-              La contraseña actual de <strong className="text-tinta">{robot.nombre}</strong> dejará de funcionar en
-              cuanto Mosquitto recargue. Tendrás que actualizar el <code>config.py</code> del ESP32.
-            </p>
-            <div className="flex gap-2">
-              <button type="button" className="btn flex-1" onClick={onCerrar}>
-                Cancelar
-              </button>
-              <button
-                type="button"
-                className="btn btn-acento flex-1"
-                onClick={() => regenerar.mutate()}
-                disabled={regenerar.isPending}
-              >
-                {regenerar.isPending ? 'Generando…' : 'Regenerar'}
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="tarjeta-sub mb-3">Cópiala ahora: no se vuelve a mostrar.</p>
-            <pre className="overflow-x-auto rounded-2xl border border-borde bg-tarjeta-tenue px-3 py-2 text-[13px]">
-              {token}
-            </pre>
+    <Modal etiqueta="Regenerar credenciales" onCerrar={onCerrar}>
+      <h2 className="tarjeta-titulo mb-1">Regenerar credenciales</h2>
+      {!token ? (
+        <>
+          <p className="tarjeta-sub mb-5">
+            La contraseña actual de <strong className="text-tinta">{robot.nombre}</strong> dejará de funcionar en
+            cuanto Mosquitto recargue. Tendrás que actualizar el <code>config.py</code> del ESP32.
+          </p>
+          <div className="flex gap-2">
+            <button type="button" className="btn flex-1" onClick={onCerrar}>
+              Cancelar
+            </button>
             <button
               type="button"
-              className="btn mt-3 w-full"
-              onClick={() => navigator.clipboard.writeText(token).catch(() => {})}
+              className="btn btn-acento flex-1"
+              onClick={() => regenerar.mutate()}
+              disabled={regenerar.isPending}
             >
-              Copiar
+              {regenerar.isPending ? 'Generando…' : 'Regenerar'}
             </button>
-            <button type="button" className="btn btn-acento mt-2 w-full" onClick={onCerrar}>
-              Listo
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="tarjeta-sub mb-3">Cópiala ahora: no se vuelve a mostrar.</p>
+          <pre className="overflow-x-auto rounded-2xl border border-borde bg-tarjeta-tenue px-3 py-2 text-[13px]">
+            {token}
+          </pre>
+          <button
+            type="button"
+            className="btn mt-3 w-full"
+            onClick={() => navigator.clipboard.writeText(token).catch(() => {})}
+          >
+            Copiar
+          </button>
+          <button type="button" className="btn btn-acento mt-2 w-full" onClick={onCerrar}>
+            Listo
+          </button>
+        </>
+      )}
+    </Modal>
   );
 }
 
@@ -121,6 +118,7 @@ export function Robots() {
   const { robotId } = useSocket();
   const qc = useQueryClient();
   const toast = useToast();
+  const confirmar = useConfirmar();
   const [nuevo, setNuevo] = useState(false);
   const [editando, setEditando] = useState<Dispositivo | null>(null);
   const [regenerando, setRegenerando] = useState<Dispositivo | null>(null);
@@ -175,10 +173,15 @@ export function Robots() {
                   <button
                     type="button"
                     className="chip hover:border-evasion/50 hover:text-evasion"
-                    onClick={() => {
-                      if (confirm(`¿Dar de baja "${r.nombre}"? Dejará de poder publicar y se borrarán sus credenciales del broker.`)) {
-                        borrar.mutate(r.id);
-                      }
+                    onClick={async () => {
+                      const ok = await confirmar({
+                        titulo: `¿Dar de baja «${r.nombre}»?`,
+                        mensaje:
+                          'Dejará de poder publicar y se borrarán sus credenciales del broker. No se puede deshacer.',
+                        confirmar: 'Dar de baja',
+                        destructivo: true,
+                      });
+                      if (ok) borrar.mutate(r.id);
                     }}
                   >
                     <span className="chip-icono">

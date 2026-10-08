@@ -20,6 +20,7 @@ import {
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/auth.tsx';
 import { BarraSuperior } from './BarraSuperior.tsx';
+import { Modal } from './ui.tsx';
 
 interface Enlace {
   to: string;
@@ -143,15 +144,8 @@ export function AppLayout() {
 
 function DialogoAyuda({ onCerrar }: { onCerrar: () => void }) {
   return (
-    <div
-      className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Ayuda"
-      onClick={onCerrar}
-    >
-      <div className="tarjeta max-w-md" onClick={(e) => e.stopPropagation()}>
-        <h2 className="tarjeta-titulo mb-2">¿Cómo funciona?</h2>
+    <Modal etiqueta="Ayuda" onCerrar={onCerrar}>
+      <h2 className="tarjeta-titulo mb-2">¿Cómo funciona?</h2>
         <ul className="list-disc space-y-2 pl-5 text-[14px] text-tinta-suave">
           <li>
             El robot decide a dónde ir <strong className="text-tinta">él solo</strong>: la evasión de obstáculos
@@ -165,10 +159,9 @@ function DialogoAyuda({ onCerrar }: { onCerrar: () => void }) {
             Sin hardware a mano, arranca el simulador con <code className="text-tinta">pnpm simular</code>.
           </li>
         </ul>
-        <button type="button" className="btn btn-acento mt-5 w-full" onClick={onCerrar}>
-          Entendido
-        </button>
-      </div>
-    </div>
+      <button type="button" className="btn btn-acento mt-5 w-full" onClick={onCerrar}>
+        Entendido
+      </button>
+    </Modal>
   );
 }

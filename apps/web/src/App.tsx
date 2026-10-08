@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.tsx';
 import { AuthProvider, useAuth } from './lib/auth.tsx';
+import { ProveedorConfirmar } from './lib/confirmar.tsx';
+import { ProveedorPanelTarjetas } from './lib/panel.tsx';
 import { ProveedorRobots } from './lib/robots.tsx';
 import { ProveedorSocket } from './lib/socket.tsx';
 import { ProveedorTema } from './lib/tema.tsx';
@@ -75,6 +77,8 @@ export function App() {
             <AuthProvider>
               <ProveedorSocket>
                 <ProveedorRobots>
+                 <ProveedorPanelTarjetas>
+                  <ProveedorConfirmar>
                   <Routes>
                     <Route path="/login" element={<SoloInvitados><Login /></SoloInvitados>} />
                     <Route path="/registro" element={<SoloInvitados><Registro /></SoloInvitados>} />
@@ -97,6 +101,8 @@ export function App() {
 
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </ProveedorConfirmar>
+                 </ProveedorPanelTarjetas>
                 </ProveedorRobots>
               </ProveedorSocket>
             </AuthProvider>
