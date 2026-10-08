@@ -12,6 +12,7 @@ import {
   Gauge,
   Bot,
   Map,
+  Radar,
   Wifi,
 } from 'lucide-react';
 
@@ -53,9 +54,10 @@ export const TARJETAS_PANEL = [
   { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 3 }, min: { w: 6, h: 2 } },
   { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
   { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
-  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 6, w: 8, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'radar', texto: 'Radar de sensores', Icono: Radar, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 18, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
 ] as const;
 
 /** Presets del diálogo de edición de un widget: columnas y filas, acotados por su mínimo. */
@@ -78,10 +80,12 @@ interface Caja {
   h: number;
 }
 
-const CLAVE = 'panel-tarjetas';
-// v2: el tablero pasó de "tantas filas como haga falta" a FILAS fijas, así que las posiciones
-// guardadas con el esquema viejo ya no valen y se empieza de cero en vez de arrastrarlas.
-const CLAVE_CAJAS = 'panel-disposicion-v2';
+// v2: el mapa y el radar son ya dos widgets distintos, así que la disposición guardada no
+// tiene sitio para el radar y la lista de visibles lo dejaría fuera para siempre. Las dos
+// claves suben de versión a la vez: se empieza de cero en vez de arrastrar una grilla a la
+// que le falta una tarjeta.
+const CLAVE = 'panel-tarjetas-v2';
+const CLAVE_CAJAS = 'panel-disposicion-v3';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 const POR_DEFECTO = Object.fromEntries(TARJETAS_PANEL.map((t) => [t.id, t.caja])) as Record<IdTarjeta, Caja>;
 

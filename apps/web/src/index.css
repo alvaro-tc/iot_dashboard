@@ -105,6 +105,10 @@ body {
   .tarjeta {
     @apply rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-12px_rgba(28,25,23,0.12)];
     animation: aparecer 180ms ease-out both;
+    /* Contenedor de consulta: dentro de una tarjeta lo que decide si una etiqueta cabe es el
+       ancho de LA TARJETA, no el de la ventana. Con breakpoints de ventana, un widget estrecho
+       en una pantalla ancha seguía mostrando los textos largos y se montaban con el título. */
+    container-type: inline-size;
   }
   .tarjeta-titulo {
     @apply text-[17px] leading-tight font-semibold;
@@ -184,13 +188,22 @@ body {
   }
 
   /* ---------- Grilla del panel (react-grid-layout) ---------- */
-  /* La celda manda el alto: la tarjeta lo rellena y recorta lo que no entre. */
+  /* La celda manda el alto y la tarjeta lo rellena. Lo que no entra NO se recorta: la tarjeta
+     hace scroll. Recortando, al encoger un widget se cortaban los pies de las tarjetas y los
+     controles del mapa quedaban medio fuera. Padding algo menor que fuera del panel: en una
+     celda pequeña esos 4 px por lado son la diferencia entre caber y no caber. */
   .widget-panel {
     @apply relative h-full;
   }
   .widget-panel > .tarjeta {
-    @apply h-full overflow-hidden;
+    @apply h-full overflow-x-hidden overflow-y-auto p-4;
     animation: none; /* la animación de entrada parpadearía en cada arrastre */
+    scrollbar-width: thin;
+  }
+  /* En edición los botones de esquina van encima de la cabecera; este hueco evita que tapen la
+     acción propia de la tarjeta (su interruptor o su botón redondo). */
+  .panel-editando .widget-panel > .tarjeta > header {
+    @apply pr-20;
   }
   /* Cajón del modo edición: columna propia a la derecha del tablero, nunca encima. Tapar las
      tarjetas mientras se colocan impide justamente lo que se está haciendo. */

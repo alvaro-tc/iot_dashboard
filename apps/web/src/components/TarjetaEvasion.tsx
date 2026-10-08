@@ -175,7 +175,7 @@ export function TarjetaEvasion() {
       subtitulo={guardando ? 'Enviando al robot…' : `Precaución a ${cfg.distanciaPrecaucionCm} cm`}
       accion={
         <div className="flex items-center gap-2">
-          <span className="hidden text-[13px] text-tinta-suave sm:inline">Automático</span>
+          <span className="hidden text-[13px] text-tinta-suave @[22rem]:inline">Automático</span>
           <Interruptor
             activo={automatico}
             onCambiar={cambiarAutomatico}

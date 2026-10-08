@@ -151,8 +151,8 @@ export function TarjetaSesiones({
         />
       }
     >
-      <div className="flex gap-4">
-        <div className="size-[108px] shrink-0 sm:size-[132px]">
+      <div className="flex flex-wrap gap-4">
+        <div className="size-[92px] shrink-0 @[20rem]:size-[108px] @[30rem]:size-[132px]">
           <Miniatura puntos={puntosMiniatura} />
         </div>
 

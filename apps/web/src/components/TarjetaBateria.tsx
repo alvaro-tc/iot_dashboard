@@ -114,7 +114,7 @@ export function TarjetaBateria() {
       subtitulo={ahorro ? 'Ahorro de energía activo' : 'Telemetría a 5 Hz'}
       accion={
         <div className="flex items-center gap-2">
-          <span className="hidden text-[13px] text-tinta-suave sm:inline">Ahorro</span>
+          <span className="hidden text-[13px] text-tinta-suave @[22rem]:inline">Ahorro</span>
           <Interruptor activo={ahorro} onCambiar={cambiarAhorro} etiqueta="Ahorro de energía" disabled={!robot} />
         </div>
       }

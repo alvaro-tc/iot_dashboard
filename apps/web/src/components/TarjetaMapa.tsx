@@ -1,5 +1,8 @@
 // La pieza central del panel: mapa en vivo o radar, con los controles del robot.
 //
+// En el panel el mapa y el radar son DOS widgets, cada uno con su caja y su tamano, asi que
+// la vista puede venir fijada por `vista`; sin ella (en /mapa) la tarjeta trae su selector.
+//
 // Equivale a la tarjeta "Smart CCTV" de la referencia: recuadro oscuro, badge "En vivo"
 // arriba a la izquierda, selector de robot arriba a la derecha y fila de botones
 // circulares translúcidos abajo.
@@ -33,18 +36,26 @@ type Vista = 'mapa' | 'radar';
 interface Props {
   /** En /mapa la tarjeta ocupa todo el ancho y el recuadro es más alto. */
   alto?: string;
+  /** Vista fija: la tarjeta es solo mapa o solo radar y no dibuja el selector. */
+  vista?: Vista;
   /** Recorrido de una sesión pasada: activa el modo repetición. */
   repeticion?: { nombre: string; poses: Pose[] } | null;
   onSalirRepeticion?: () => void;
 }
 
-export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null, onSalirRepeticion }: Props) {
+export function TarjetaMapa({
+  alto = 'h-[300px] sm:h-[380px]',
+  vista: vistaFija,
+  repeticion = null,
+  onSalirRepeticion,
+}: Props) {
   const { robot, robots, mover } = useRobots();
   const { config, estadoRobot, estado, enviarComando, historial, idConexion } = useSocket();
   const toast = useToast();
   const lectura = useUltimaLectura(4);
 
-  const [vista, setVista] = useState<Vista>('mapa');
+  const [vistaLibre, setVistaLibre] = useState<Vista>('mapa');
+  const vista = vistaFija ?? vistaLibre;
   const [seguir, setSeguir] = useState(true);
   const [haces, setHaces] = useState(true);
   const [enviando, setEnviando] = useState<string | null>(null);
@@ -103,7 +114,7 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
 
   return (
     <section className="tarjeta flex flex-col">
-      <header className="mb-4 flex items-start justify-between gap-3">
+      <header className="mb-4 flex shrink-0 items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 className="tarjeta-titulo truncate">{vista === 'mapa' ? 'Mapa en vivo' : 'Radar de sensores'}</h2>
           <p className="tarjeta-sub truncate">
@@ -111,15 +122,17 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          <Segmentado
-            etiqueta="Vista"
-            valor={vista}
-            onCambiar={setVista}
-            opciones={[
-              { valor: 'mapa' as Vista, texto: 'Mapa' },
-              { valor: 'radar' as Vista, texto: 'Radar' },
-            ]}
-          />
+          {!vistaFija && (
+            <Segmentado
+              etiqueta="Vista"
+              valor={vista}
+              onCambiar={setVistaLibre}
+              opciones={[
+                { valor: 'mapa' as Vista, texto: 'Mapa' },
+                { valor: 'radar' as Vista, texto: 'Radar' },
+              ]}
+            />
+          )}
           {/* Botón de encendido: alterna automático ↔ detenido */}
           <button
             type="button"
@@ -135,7 +148,9 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
       </header>
 
       {/* ---- Recuadro oscuro ---- */}
-      <div className={`relative overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${alto}`}>
+      {/* El recuadro tiene su propio suelo de alto: en un widget bajo el panel hace scroll
+          en vez de recortar el mapa y sus controles. */}
+      <div className={`relative min-h-[260px] overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${alto}`}>
         {vista === 'mapa' ? (
           <MapaVivo
             ref={mapa}
@@ -148,48 +163,53 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
           <RadarSensores config={cfg} lectura={lectura} />
         )}
 
-        {/* Badge de estado, arriba a la izquierda */}
-        <div className="pointer-events-none absolute top-3 left-3 flex flex-wrap gap-2">
-          {repeticion ? (
-            <span className="badge bg-acento/90 text-white">Repetición · {repeticion.nombre}</span>
-          ) : (
-            <BadgeVivo
-              enVivo={enVivo}
-              texto={estado !== 'conectado' ? 'Sin servidor' : estadoRobot?.enLinea ? 'En vivo' : 'Robot apagado'}
-            />
+        {/* Badge de estado y selector de robot en UNA fila con justify-between: colocados cada
+            uno por su esquina (left-3 / right-3) se montaban uno encima del otro en cuanto el
+            widget se estrechaba, que es justo lo que pasa al redimensionarlo. */}
+        <div className="pointer-events-none absolute inset-x-3 top-3 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap gap-2">
+            {repeticion ? (
+              <span className="badge min-w-0 bg-acento/90 text-white">
+                <span className="truncate">Repetición · {repeticion.nombre}</span>
+              </span>
+            ) : (
+              <BadgeVivo
+                enVivo={enVivo}
+                texto={estado !== 'conectado' ? 'Sin servidor' : estadoRobot?.enLinea ? 'En vivo' : 'Robot apagado'}
+              />
+            )}
+          </div>
+
+          {robots.length > 0 && !repeticion && (
+            <div className="pointer-events-auto flex min-w-0 items-center gap-1 rounded-full bg-white/10 px-1 py-1 backdrop-blur">
+              <button
+                type="button"
+                aria-label="Robot anterior"
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-white/80 hover:bg-white/15 disabled:opacity-30"
+                disabled={robots.length < 2}
+                onClick={() => mover(-1)}
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+              <span className="min-w-0 truncate px-1 text-[13px] font-medium text-white">{robot?.nombre ?? '—'}</span>
+              <button
+                type="button"
+                aria-label="Robot siguiente"
+                className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-white/80 hover:bg-white/15 disabled:opacity-30"
+                disabled={robots.length < 2}
+                onClick={() => mover(1)}
+              >
+                <ChevronRight className="size-4" />
+              </button>
+            </div>
           )}
         </div>
 
-        {/* Selector de robot, arriba a la derecha */}
-        {robots.length > 0 && !repeticion && (
-          <div className="absolute top-3 right-3 flex items-center gap-1 rounded-full bg-white/10 px-1 py-1 backdrop-blur">
-            <button
-              type="button"
-              aria-label="Robot anterior"
-              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-white/80 hover:bg-white/15 disabled:opacity-30"
-              disabled={robots.length < 2}
-              onClick={() => mover(-1)}
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <span className="max-w-[140px] truncate px-1 text-[13px] font-medium text-white">
-              {robot?.nombre ?? '—'}
-            </span>
-            <button
-              type="button"
-              aria-label="Robot siguiente"
-              className="inline-flex size-7 cursor-pointer items-center justify-center rounded-full text-white/80 hover:bg-white/15 disabled:opacity-30"
-              disabled={robots.length < 2}
-              onClick={() => mover(1)}
-            >
-              <ChevronRight className="size-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Controles propios de la vista Mapa, arriba a la derecha bajo el selector */}
+        {/* Controles propios de la vista Mapa, bajo el selector. La columna está acotada por
+            arriba y por abajo (bottom-16, por encima de la fila inferior) y envuelve: si no caben
+            los seis, pasan a una segunda columna a su izquierda en vez de pisar los de abajo. */}
         {vista === 'mapa' && (
-          <div className="absolute top-14 right-3 flex flex-col gap-1.5">
+          <div className="absolute top-14 right-3 bottom-16 flex flex-col flex-wrap-reverse content-start gap-1.5">
             <BotonMapa etiqueta="Acercar" onClick={() => mapa.current?.zoom(0.8)}>
               <ZoomIn className="size-4" />
             </BotonMapa>
@@ -220,7 +240,7 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
         )}
 
         {/* Fila inferior de botones circulares */}
-        <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-2">
+        <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center justify-center gap-2">
           <BotonMapa
             etiqueta={enMarcha ? 'Pausar' : 'Iniciar'}
             disabled={!robot || !!enviando || !!repeticion}
@@ -235,9 +255,11 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
           >
             <Square className="size-4" />
           </BotonMapa>
-          <BotonMapa etiqueta="Captura PNG" onClick={capturar} disabled={vista !== 'mapa'}>
-            <Camera className="size-4" />
-          </BotonMapa>
+          {vista === 'mapa' && (
+            <BotonMapa etiqueta="Captura PNG" onClick={capturar}>
+              <Camera className="size-4" />
+            </BotonMapa>
+          )}
           {repeticion && onSalirRepeticion && (
             <button type="button" className="btn btn-sm btn-acento ml-2" onClick={onSalirRepeticion}>
               Volver a En vivo
@@ -250,22 +272,25 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
       <p className="mt-3 text-[14px] font-medium" aria-live="polite">
         {banner}
       </p>
-      <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-tinta-suave">
-        <span>
-          Posición <span className="text-tinta tabular-nums">{cm(lectura?.posXCm)}</span>,{' '}
-          <span className="text-tinta tabular-nums">{cm(lectura?.posYCm)}</span>
-        </span>
-        <span>
-          Orientación <span className="text-tinta tabular-nums">{grados(lectura?.orientacionDeg)}</span>
-        </span>
-        <span>
-          Recorrido <span className="text-tinta tabular-nums">{distancia(distanciaDe(historial()))}</span>
-        </span>
-      </div>
+      {vista === 'mapa' && (
+        <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-[13px] text-tinta-suave">
+          <span>
+            Posición <span className="text-tinta tabular-nums">{cm(lectura?.posXCm)}</span>,{' '}
+            <span className="text-tinta tabular-nums">{cm(lectura?.posYCm)}</span>
+          </span>
+          <span>
+            Orientación <span className="text-tinta tabular-nums">{grados(lectura?.orientacionDeg)}</span>
+          </span>
+          <span>
+            Recorrido <span className="text-tinta tabular-nums">{distancia(distanciaDe(historial()))}</span>
+          </span>
+        </div>
+      )}
 
-      {/* Leyenda */}
+      {/* Leyenda. Los colores de los sensores valen para las dos vistas; la trayectoria solo
+          existe en el mapa. */}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-tinta-suave">
-        <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>
+        {vista === 'mapa' && <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>}
         <Leyenda color="var(--color-evasion)">Obstáculo / evasión</Leyenda>
         <Leyenda color="var(--color-precaucion)">Precaución</Leyenda>
         <Leyenda color="var(--color-libre)">Libre</Leyenda>

@@ -243,7 +243,7 @@ export function TarjetaDistancias() {
       subtitulo="Lo que mide cada sensor"
       accion={
         <div className="flex items-center gap-2">
-          <span className="hidden text-[13px] text-tinta-suave sm:inline">Seguir en vivo</span>
+          <span className="hidden text-[13px] text-tinta-suave @[22rem]:inline">Seguir en vivo</span>
           <Interruptor
             activo={enVivo && ventana !== '1h'}
             onCambiar={setEnVivo}
