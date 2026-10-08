@@ -53,6 +53,6 @@ jobs:
             set -e
             cd /srv/iot
             CI=true pnpm install --frozen-lockfile --config.minimum-release-age=0
-            sudo systemctl restart iot-api
+            sudo -n systemctl restart iot-api
             curl -fsS --retry 15 --retry-connrefused --retry-delay 2 http://localhost:4000/api/health
           '
