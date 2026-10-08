@@ -41,10 +41,13 @@ jobs:
           echo "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       # Sube código + apps/web/dist. Lo excluido (.env, node_modules) no se borra en el servidor.
+      # `/mosquitto` va con barra a propósito: solo la carpeta de la raíz (passwd/acl, que los
+      # genera el backend). Sin la barra el patrón casaba también con infra/mosquitto/ y su
+      # configuración nunca llegaba al VPS.
       - name: Subir al VPS
         run: >
           rsync -az --delete
-          --exclude .git --exclude node_modules --exclude .env --exclude mosquitto
+          --exclude .git --exclude node_modules --exclude .env --exclude /mosquitto
           ./ deploy@${{ secrets.VPS_HOST }}:/srv/iot/
 
       - name: Instalar dependencias y reiniciar API
