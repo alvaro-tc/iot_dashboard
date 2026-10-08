@@ -1,14 +1,20 @@
 // Panel principal. Las tarjetas viven en una grilla de react-grid-layout: cada cliente las
 // mueve y redimensiona a su gusto y la disposición se guarda en su navegador (lib/panel.tsx).
 //
+// El panel NO hace scroll: es un tablero, se tiene que ver de un vistazo. El alto de fila de la
+// grilla se calcula a partir del alto que queda libre hasta el borde de la ventana y del número
+// de filas ocupadas, así que la disposición siempre cabe exactamente. Solo en pantalla estrecha
+// (una columna, nada que colocar) se deja scroll vertical, porque ahí no hay alternativa.
+//
 // El arrastre y los tiradores solo se activan en "modo edición": las tarjetas tienen dentro
 // mapas con pan y gráficas con zoom, y si el arrastre estuviera siempre activo pelearían por
 // el mismo gesto. En modo edición un velo encima de cada tarjeta se queda con el ratón.
 //
-// Al entrar en edición la grilla cede ANCHO_LATERAL al cajón de widgets: al medir menos ancho
-// las tarjetas se encogen solas (la grilla es proporcional), igual que en un escritorio móvil.
-// Cada widget saca entonces sus controles de esquina: lápiz para su tamaño y cruz para quitarlo.
-import React, { useState } from 'react';
+// Al entrar en edición la grilla cede ANCHO_LATERAL al panel de widgets, que ocupa toda la
+// columna derecha de alto completo y muestra cada widget en miniatura (el widget de verdad,
+// dibujado a tamaño real y escalado). Cada widget saca entonces sus controles de esquina:
+// lápiz para su tamaño y cruz para quitarlo.
+import React, { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LayoutGrid, Pencil, Plus, RotateCcw, X } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
@@ -22,6 +28,7 @@ import {
   ANCHOS,
   COLUMNAS,
   MARGEN,
+  MINIATURA,
   TARJETAS_PANEL,
   usePanelTarjetas,
   type IdTarjeta,
@@ -39,49 +46,103 @@ import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { TarjetaSesiones, type EstadoRepeticion } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
 
+/** Alto libre desde el elemento hasta el borde inferior de la ventana; 0 si no se ajusta. */
+function useAltoLibre(ref: React.RefObject<HTMLElement | null>, activo: boolean) {
+  const [alto, setAlto] = useState(0);
+  useLayoutEffect(() => {
+    if (!activo) {
+      setAlto(0);
+      return;
+    }
+    const medir = () => {
+      const el = ref.current;
+      if (!el) return;
+      // El <main> lleva su propio padding inferior: si no se descuenta, sobra justo ese alto
+      // por debajo de la ventana y vuelve a aparecer la barra de scroll.
+      const main = el.closest('main');
+      const hueco = main ? parseFloat(getComputedStyle(main).paddingBottom) || 0 : 0;
+      setAlto(Math.max(360, Math.floor(window.innerHeight - el.getBoundingClientRect().top - hueco)));
+    };
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, [ref, activo]);
+  return alto;
+}
+
+/** Alto real de la caja de la grilla, que lo fija el flex y no su contenido. */
+function useAltoMedido(ref: React.RefObject<HTMLElement | null>) {
+  const [alto, setAlto] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setAlto(e.contentRect.height));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return alto;
+}
+
+/** El widget de verdad, dibujado a tamaño real y escalado: preview fiel sin código aparte. */
+function Miniatura({ children }: { children: ReactNode }) {
+  const escala = MINIATURA.caja / MINIATURA.ancho;
+  return (
+    <div className="miniatura" style={{ height: Math.round(MINIATURA.alto * escala) }}>
+      <div
+        className="origin-top-left"
+        style={{ width: MINIATURA.ancho, height: MINIATURA.alto, transform: `scale(${escala})` }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
 /**
- * Cajón de widgets del modo edición: arriba los que no están en el panel, para añadirlos de un
- * toque, y abajo los que sí. Es el mismo contenido en el lateral (escritorio) y en el modal
- * (pantalla estrecha, donde la grilla es de una columna y no hay nada que colocar).
+ * Lista de widgets del modo edición: todos, con su miniatura, marcados los que ya están en el
+ * panel. Es el mismo contenido en el lateral (escritorio) y en el modal (pantalla estrecha,
+ * donde la grilla es de una columna, no hay nada que colocar y la miniatura no cabe).
  */
-function CajonWidgets() {
+function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
   const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles } = usePanelTarjetas();
-  const fuera = TARJETAS_PANEL.filter((t) => !ve(t.id));
+  const fuera = TARJETAS_PANEL.length - visibles.length;
   return (
     <>
       <p className="tarjeta-sub mb-3">
         Toca un widget para añadirlo o quitarlo. Arrástralos en el panel para colocarlos y tira del borde o de
         la esquina para cambiar su tamaño. Se guarda en este navegador.
       </p>
-      <p className="mb-2 text-[12px] font-semibold tracking-wide text-tinta-suave uppercase">
-        {fuera.length ? 'Para añadir' : 'En el panel'}
-      </p>
-      <ul className="space-y-1">
-        {(fuera.length ? fuera : TARJETAS_PANEL).map(({ id, texto, Icono }) => (
+      <ul className={vista ? 'space-y-3' : 'space-y-1'}>
+        {TARJETAS_PANEL.map(({ id, texto, Icono }) => (
           <li key={id}>
             <button
               type="button"
-              className="chip w-full justify-start"
-              onClick={() => alternar(id)}
+              aria-pressed={ve(id)}
               aria-label={`${ve(id) ? 'Quitar' : 'Añadir'} ${texto}`}
+              onClick={() => alternar(id)}
+              className={
+                vista
+                  ? `w-full cursor-pointer rounded-2xl border p-2 text-left transition-colors duration-150 ${
+                      ve(id) ? 'border-acento/50 bg-acento/5' : 'border-borde hover:border-acento/40'
+                    }`
+                  : 'chip w-full justify-start'
+              }
             >
-              <span className="chip-icono">
-                <Icono className="size-3.5" />
+              <span className={vista ? 'mb-2 flex items-center gap-2' : 'flex min-w-0 flex-1 items-center gap-2'}>
+                <span className="chip-icono">
+                  <Icono className="size-3.5" />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-left text-[13px] font-medium">{texto}</span>
+                {ve(id) ? <X className="size-4 shrink-0 opacity-60" /> : <Plus className="size-4 shrink-0" />}
               </span>
-              <span className="min-w-0 flex-1 truncate text-left">{texto}</span>
-              {ve(id) ? <X className="size-4 shrink-0 opacity-60" /> : <Plus className="size-4 shrink-0" />}
+              {vista && <Miniatura>{vista(id)}</Miniatura>}
             </button>
           </li>
         ))}
       </ul>
-      {!!fuera.length && !!visibles.length && (
-        <p className="mt-3 text-[12px] text-tinta-suave">
-          {visibles.length} widget{visibles.length === 1 ? '' : 's'} en el panel.
-        </p>
-      )}
       {!visibles.length && <p className="mt-3 text-[13px] text-precaucion">Sin widgets el panel queda vacío.</p>}
       <div className="mt-5 flex gap-2">
-        <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={!fuera.length}>
+        <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={!fuera}>
           Añadir todos
         </button>
         <button
@@ -146,6 +207,8 @@ export function Panel() {
   const { robotId } = useSocket();
   const { layout, guardarLayout, alternar } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
+  const marcoRef = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [editando, setEditando] = useState(false);
   const [widget, setWidget] = useState<IdTarjeta | null>(null);
@@ -157,6 +220,20 @@ export function Panel() {
     enabled: !!robotId,
     refetchInterval: 10_000,
   });
+
+  // En una sola columna no hay nada que reordenar ni forma de que todo quepa sin scroll: los
+  // tiradores solo estorbarían. El umbral se mide sobre el ancho SIN lateral: si no, abrirlo
+  // encogería la grilla por debajo del umbral, eso cerraría el modo edición, la grilla volvería
+  // a crecer... y el panel entraría en bucle.
+  const anchoTotal = editando ? width + ANCHO_LATERAL + MARGEN : width;
+  const puedeColocar = anchoTotal >= ANCHO_GRILLA;
+  const edicionActiva = editando && puedeColocar;
+  /** Ajustar a la ventana solo donde la grilla es de verdad una grilla. */
+  const ajustar = puedeColocar && layout.length > 0;
+  const altoMarco = useAltoLibre(marcoRef, ajustar);
+  const altoArea = useAltoMedido(areaRef);
+  const filas = layout.reduce((max, l) => Math.max(max, l.y + l.h), 1);
+  const altoFila = ajustar && altoArea ? Math.max(16, (altoArea - (filas - 1) * MARGEN) / filas) : ALTO_FILA;
 
   if (cargando) {
     return (
@@ -224,16 +301,13 @@ export function Panel() {
     }
   };
 
-  // En una sola columna no hay nada que reordenar: los tiradores solo estorbarían. El umbral se
-  // mide sobre el ancho SIN cajón: si no, abrirlo encogería la grilla por debajo del umbral, eso
-  // cerraría el modo edición, la grilla volvería a crecer... y el panel entraría en bucle.
-  const anchoTotal = editando ? width + ANCHO_LATERAL + MARGEN : width;
-  const puedeColocar = anchoTotal >= ANCHO_GRILLA;
-  const edicionActiva = editando && puedeColocar;
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-end gap-2">
+    <div
+      ref={marcoRef}
+      className={`flex flex-col gap-3 ${ajustar ? 'overflow-hidden' : ''}`}
+      style={ajustar && altoMarco ? { height: altoMarco } : undefined}
+    >
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
         {edicionActiva && (
           <p className="mr-auto text-[13px] text-tinta-suave">
             Modo edición: arrastra los widgets, tira del borde para cambiarlos de tamaño y usa los botones de
@@ -251,68 +325,68 @@ export function Panel() {
         </button>
       </div>
 
-      <div className={edicionActiva ? 'flex items-start gap-4' : undefined}>
-        <div ref={containerRef as React.RefObject<HTMLDivElement>} className="min-w-0 flex-1">
-          {mounted && layout.length > 0 && (
-            <ResponsiveGridLayout
-              width={width}
-              className={edicionActiva ? 'panel-editando' : undefined}
-              layouts={{ grande: layout }}
-              breakpoints={{ grande: edicionActiva ? ANCHO_GRILLA_EDICION : ANCHO_GRILLA, chico: 0 }}
-              cols={{ grande: COLUMNAS, chico: 1 }}
-              rowHeight={ALTO_FILA}
-              margin={[MARGEN, MARGEN]}
-              containerPadding={[0, 0]}
-              dragConfig={{ enabled: edicionActiva }}
-              resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
-              onLayoutChange={(_actual, todos) => guardarLayout(todos.grande ?? [])}
-            >
-              {layout.map(({ i }) => {
-                const id = i as IdTarjeta;
-                const texto = TARJETAS_PANEL.find((t) => t.id === id)?.texto ?? id;
-                return (
-                  <div key={i} className="widget-panel">
-                    {tarjeta(id)}
-                    {edicionActiva && (
-                      <>
-                        <div className="velo-editar" aria-hidden />
-                        <div className="acciones-widget">
-                          <button
-                            type="button"
-                            className="boton-widget"
-                            aria-label={`Editar ${texto}`}
-                            title={`Editar ${texto}`}
-                            onClick={() => setWidget(id)}
-                          >
-                            <Pencil className="size-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            className="boton-widget boton-widget-quitar"
-                            aria-label={`Quitar ${texto}`}
-                            title={`Quitar ${texto}`}
-                            onClick={() => alternar(id)}
-                          >
-                            <X className="size-4" />
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
-            </ResponsiveGridLayout>
-          )}
+      <div className="flex min-h-0 flex-1 items-stretch gap-4">
+        <div ref={areaRef} className="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <div ref={containerRef as React.RefObject<HTMLDivElement>} className="h-full">
+            {mounted && layout.length > 0 && (
+              <ResponsiveGridLayout
+                width={width}
+                className={edicionActiva ? 'panel-editando' : undefined}
+                layouts={{ grande: layout }}
+                breakpoints={{ grande: edicionActiva ? ANCHO_GRILLA_EDICION : ANCHO_GRILLA, chico: 0 }}
+                cols={{ grande: COLUMNAS, chico: 1 }}
+                rowHeight={altoFila}
+                margin={[MARGEN, MARGEN]}
+                containerPadding={[0, 0]}
+                dragConfig={{ enabled: edicionActiva }}
+                resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
+                onLayoutChange={(_actual, todos) => guardarLayout(todos.grande ?? [])}
+              >
+                {layout.map(({ i }) => {
+                  const id = i as IdTarjeta;
+                  const texto = TARJETAS_PANEL.find((t) => t.id === id)?.texto ?? id;
+                  return (
+                    <div key={i} className="widget-panel">
+                      {tarjeta(id)}
+                      {edicionActiva && (
+                        <>
+                          <div className="velo-editar" aria-hidden />
+                          <div className="acciones-widget">
+                            <button
+                              type="button"
+                              className="boton-widget"
+                              aria-label={`Editar ${texto}`}
+                              title={`Editar ${texto}`}
+                              onClick={() => setWidget(id)}
+                            >
+                              <Pencil className="size-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              className="boton-widget boton-widget-quitar"
+                              aria-label={`Quitar ${texto}`}
+                              title={`Quitar ${texto}`}
+                              onClick={() => alternar(id)}
+                            >
+                              <X className="size-4" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </ResponsiveGridLayout>
+            )}
+          </div>
         </div>
 
         {edicionActiva && (
-          <aside
-            aria-label="Widgets"
-            className="tarjeta sticky top-4 max-h-[calc(100dvh-6rem)] shrink-0 overflow-y-auto"
-            style={{ width: ANCHO_LATERAL }}
-          >
-            <h2 className="tarjeta-titulo mb-1">Widgets</h2>
-            <CajonWidgets />
+          <aside aria-label="Widgets" className="lateral-widgets" style={{ width: ANCHO_LATERAL }}>
+            <h2 className="tarjeta-titulo mb-1 shrink-0">Widgets</h2>
+            <div className="-mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
+              <CajonWidgets vista={tarjeta} />
+            </div>
           </aside>
         )}
       </div>
@@ -333,7 +407,7 @@ export function Panel() {
       )}
 
       {robot && (
-        <p className="px-2 pb-2 text-[12px] text-tinta-suave">
+        <p className="shrink-0 px-2 text-[12px] text-tinta-suave">
           La posición del mapa es una estimación por odometría y acumula error con el tiempo. Pulsa «Detener» y
           vuelve a «Iniciar» para reiniciar el origen.
         </p>

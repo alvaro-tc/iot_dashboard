@@ -192,6 +192,20 @@ body {
     @apply h-full overflow-hidden;
     animation: none; /* la animación de entrada parpadearía en cada arrastre */
   }
+  /* Columna derecha del modo edición: ocupa todo el alto disponible, pegada al borde del
+     panel. No es una tarjeta flotante: es parte del tablero. */
+  .lateral-widgets {
+    @apply flex min-h-0 shrink-0 flex-col border-l border-borde bg-tarjeta/60 pl-4;
+  }
+  /* Miniatura del widget: el widget real dibujado a tamaño completo y escalado, recortado a
+     la caja. Sin ratón: el clic es del botón que la contiene. */
+  .miniatura {
+    @apply pointer-events-none w-full overflow-hidden rounded-xl border border-borde bg-lienzo;
+  }
+  .miniatura > div > * {
+    @apply h-full overflow-hidden;
+    animation: none;
+  }
   /* Velo de modo edición: se queda con el ratón para que no lo capturen el mapa ni las
      gráficas, que tienen pan y zoom propios. */
   .velo-editar {

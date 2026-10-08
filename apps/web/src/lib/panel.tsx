@@ -21,20 +21,22 @@ export const ALTO_FILA = 40;
 export const MARGEN = 16;
 /** Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. */
 export const ANCHO_GRILLA = 1024;
-/** Ancho del cajón de widgets del modo edición. La grilla cede ese espacio y se encoge. */
-export const ANCHO_LATERAL = 288;
+/** Ancho del panel lateral de widgets del modo edición. La grilla cede ese espacio y se encoge. */
+export const ANCHO_LATERAL = 336;
+/** Tamaño al que se dibuja la miniatura antes de escalarla, y el ancho de su caja en el lateral. */
+export const MINIATURA = { ancho: 560, alto: 300, caja: 288 } as const;
 /** Umbral de la grilla ya encogida: en edición entra el cajón sin colapsar a una columna. */
 export const ANCHO_GRILLA_EDICION = ANCHO_GRILLA - ANCHO_LATERAL - MARGEN;
 
 /** `caja` es la posición por defecto; `min` el tamaño por debajo del cual la tarjeta no se lee. */
 export const TARJETAS_PANEL = [
-  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 13 }, min: { w: 8, h: 8 } },
-  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 5 }, min: { w: 6, h: 4 } },
-  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 5, w: 5, h: 8 }, min: { w: 4, h: 5 } },
-  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 5, w: 5, h: 8 }, min: { w: 4, h: 5 } },
-  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
-  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
-  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
+  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 9 }, min: { w: 8, h: 7 } },
+  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 4 }, min: { w: 6, h: 3 } },
+  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 4, w: 5, h: 5 }, min: { w: 4, h: 4 } },
+  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 4, w: 5, h: 5 }, min: { w: 4, h: 4 } },
+  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
+  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
+  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 9, w: 8, h: 6 }, min: { w: 5, h: 5 } },
 ] as const;
 
 /** Presets del diálogo de edición de un widget: columnas y filas, acotados por su mínimo. */
@@ -44,9 +46,9 @@ export const ANCHOS = [
   { valor: 24, texto: 'Completo' },
 ] as const;
 export const ALTOS = [
-  { valor: 6, texto: 'Bajo' },
-  { valor: 9, texto: 'Medio' },
-  { valor: 13, texto: 'Alto' },
+  { valor: 4, texto: 'Bajo' },
+  { valor: 6, texto: 'Medio' },
+  { valor: 9, texto: 'Alto' },
 ] as const;
 
 export type IdTarjeta = (typeof TARJETAS_PANEL)[number]['id'];
