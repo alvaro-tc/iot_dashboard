@@ -93,12 +93,31 @@ Esquema y datos de demo:
 pnpm db:reset
 ```
 
-## 5. Dominio y certificado
+## 5. Dominio, Nginx y certificado
 
 Apunta un registro **A** de `tu-dominio.com` a la IP del VPS y espera a que propague.
 
+El orden importa: **primero** se instala la configuración de Nginx del repositorio y
+**luego** se pide el certificado, porque `certbot --nginx` edita ese archivo para añadirle el
+bloque TLS. Al revés, el `cp` del paso 7 machacaba lo que escribió Certbot y el sitio se
+quedaba sin HTTPS y sin el proxy de `/socket.io/`.
+
 ```bash
+sudo cp /srv/iot/infra/nginx/roomba.conf /etc/nginx/sites-available/roomba
+sudo sed -i 's/tu-dominio.com/TU-DOMINIO-REAL/g' /etc/nginx/sites-available/roomba
+sudo ln -sf /etc/nginx/sites-available/roomba /etc/nginx/sites-enabled/roomba
+sudo rm -f /etc/nginx/sites-enabled/default
+sudo nginx -t && sudo systemctl reload nginx
+
 sudo certbot --nginx -d tu-dominio.com
+```
+
+Comprueba que el WebSocket queda proxyado (y no servido como `index.html`):
+
+```bash
+curl -s "https://tu-dominio.com/socket.io/?EIO=4&transport=polling" | head -c 40
+# 0{"sid":"...   ← bien
+# <!doctype html ← falta el bloque location /socket.io/ en el Nginx instalado
 ```
 
 ## 6. Mosquitto
@@ -126,13 +145,9 @@ sudo ss -tlnp | grep mosquitto
 
 ```bash
 cd /srv/iot && pnpm --filter @iot/web build
-sudo cp /srv/iot/infra/nginx/roomba.conf /etc/nginx/sites-available/roomba
-sudo ln -sf /etc/nginx/sites-available/roomba /etc/nginx/sites-enabled/roomba
-sudo rm -f /etc/nginx/sites-enabled/default
-sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Certbot ya añadió el bloque TLS; revisa que `server_name` coincida con tu dominio.
+El Nginx ya quedó instalado en el paso 5; aquí solo se regenera `apps/web/dist`.
 
 ## 8. Backend con pm2
 
@@ -146,7 +161,7 @@ pm2 startup systemd   # ejecuta el comando que imprima
 ## 9. Comprobar
 
 ```bash
-curl -s https://tu-dominio.com/api/salud
+curl -s https://tu-dominio.com/api/salud -H "Authorization: Bearer $TOKEN"
 # {"ok":true,"postgres":true,"mosquitto":true,"bufferPersistencia":0,"clientesWebSocket":0}
 
 pm2 logs iot-api --lines 50
@@ -165,6 +180,10 @@ pnpm install
 pnpm --filter @iot/web build
 pm2 reload iot-api        # reload, no restart: vacía el buffer antes de salir
 ```
+
+El despliegue **no toca la base de datos**. Si `apps/api/db/schema.sql` cambió, hay que
+aplicarlo a mano con `pnpm db:reset` (borra y regenera todo, incluidas las cuentas) y luego
+`pnpm db:seed-admin`.
 
 `pm2 reload` manda SIGINT, y el backend vacía el buffer de persistencia y las sesiones
 abiertas antes de terminar. Un `kill -9` perdería hasta un segundo de lecturas.
@@ -195,6 +214,7 @@ tendrían que regenerar credenciales (en la base solo está el hash bcrypt, no e
 |---|---|
 | `[broker] no se pudo sincronizar Mosquitto` | Faltan permisos sobre `passwd`/`acl`, o la regla de sudoers para el reload |
 | El robot conecta pero no publica | Su usuario no está en la ACL: da de baja y vuelve a dar de alta, o reinicia el backend (hace `syncBroker()` al arrancar) |
-| El WebSocket no conecta desde el navegador | Faltan las cabeceras `Upgrade`/`Connection` en el `location /socket.io` de Nginx |
+| El WebSocket no conecta desde el navegador | El Nginx instalado no tiene el `location /socket.io/` (o le faltan las cabeceras `Upgrade`/`Connection`). Compruébalo con el `curl` del paso 5 |
+| `500` en cualquier cosa de robots, pero login y `/api/health` van bien | El esquema de la base está atrasado (p. ej. no existe la tabla `dispositivos`). Mira `\dt` en `psql` y aplica `pnpm db:reset` |
 | Latencia alta y a saltos | El reloj del ESP32 no está sincronizado por NTP: `t` viene mal y la latencia medida es basura |
 | `ECONNREFUSED` al arrancar la API | Postgres no está levantado o `DATABASE_URL` apunta a otro puerto |

@@ -31,7 +31,7 @@ jobs:
         run: pnpm --filter @iot/web build
         env:
           VITE_API_URL: https://iot-dashboard.tumype.com
-          VITE_WS_URL: wss://iot-dashboard.tumype.com/ws
+          # VITE_SOCKET_URL no se define: cae en VITE_API_URL, que es el mismo host.
 
       - name: Configurar SSH
         run: |

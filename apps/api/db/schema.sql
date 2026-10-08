@@ -2,6 +2,8 @@
 DROP VIEW IF EXISTS v_resumen_sesion, v_lecturas_por_hora, v_lecturas_por_minuto CASCADE;
 DROP FUNCTION IF EXISTS obtener_mapa_sesion(BIGINT, INTEGER) CASCADE;
 DROP TABLE IF EXISTS eventos, lecturas, sesiones, configuracion_dispositivo, dispositivos, users CASCADE;
+-- Tablas del esquema viejo (devices/runs/samples), por si la base viene de un despliegue anterior.
+DROP TABLE IF EXISTS samples, runs, devices CASCADE;
 
 CREATE TABLE users (
   id          SERIAL PRIMARY KEY,
