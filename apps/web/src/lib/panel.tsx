@@ -1,6 +1,10 @@
-// Qué tarjetas ve cada cliente en su panel. Se guarda en este navegador, como el tema,
-// y el cambio se aplica al instante (el panel lee este contexto).
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+// Qué tarjetas ve cada cliente en su panel, dónde están y de qué tamaño. Se guarda en este
+// navegador, como el tema, y el cambio se aplica al instante (el panel lee este contexto).
+//
+// La disposición es una grilla de react-grid-layout: `visibles` dice qué se dibuja y `cajas`
+// dónde. Se guardan en claves separadas para que ocultar una tarjeta no pierda su sitio.
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { Layout } from 'react-grid-layout';
 import {
   Activity,
   BatteryCharging,
@@ -11,23 +15,39 @@ import {
   Wifi,
 } from 'lucide-react';
 
+/** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
+export const COLUMNAS = 24;
+export const ALTO_FILA = 40;
+export const MARGEN = 16;
+/** Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. */
+export const ANCHO_GRILLA = 1024;
+
+/** `caja` es la posición por defecto; `min` el tamaño por debajo del cual la tarjeta no se lee. */
 export const TARJETAS_PANEL = [
-  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map },
-  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock },
-  { id: 'estado', texto: 'Estado del robot', Icono: Bot },
-  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi },
-  { id: 'distancias', texto: 'Distancias', Icono: Activity },
-  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging },
-  { id: 'evasion', texto: 'Evasión', Icono: Gauge },
+  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 13 }, min: { w: 8, h: 8 } },
+  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 5 }, min: { w: 6, h: 4 } },
+  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 5, w: 5, h: 8 }, min: { w: 4, h: 5 } },
+  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 5, w: 5, h: 8 }, min: { w: 4, h: 5 } },
+  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 0, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
+  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 8, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
+  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 16, y: 13, w: 8, h: 9 }, min: { w: 5, h: 6 } },
 ] as const;
 
 export type IdTarjeta = (typeof TARJETAS_PANEL)[number]['id'];
+interface Caja {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 const CLAVE = 'panel-tarjetas';
+const CLAVE_CAJAS = 'panel-disposicion';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
+const POR_DEFECTO = Object.fromEntries(TARJETAS_PANEL.map((t) => [t.id, t.caja])) as Record<IdTarjeta, Caja>;
 
 /** Ignora ids desconocidos: si una tarjeta desaparece del código, la preferencia no rompe. */
-function leer(): IdTarjeta[] {
+function leerVisibles(): IdTarjeta[] {
   try {
     const guardado = localStorage.getItem(CLAVE);
     if (!guardado) return TODAS;
@@ -39,26 +59,63 @@ function leer(): IdTarjeta[] {
   }
 }
 
+/** Igual con las cajas, y además descarta las mal formadas: una preferencia vieja no rompe. */
+function leerCajas(): Partial<Record<IdTarjeta, Caja>> {
+  try {
+    const guardado = localStorage.getItem(CLAVE_CAJAS);
+    if (!guardado) return {};
+    const crudo = JSON.parse(guardado) as Record<string, Partial<Caja> | undefined>;
+    const cajas: Partial<Record<IdTarjeta, Caja>> = {};
+    for (const id of TODAS) {
+      const c = crudo?.[id];
+      if (!c) continue;
+      const nums = [c.x, c.y, c.w, c.h];
+      if (nums.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)) cajas[id] = c as Caja;
+    }
+    return cajas;
+  } catch {
+    return {};
+  }
+}
+
 interface ValorPanel {
   visibles: IdTarjeta[];
   ve: (id: IdTarjeta) => boolean;
   alternar: (id: IdTarjeta) => void;
+  /** Vuelve a mostrar todas las tarjetas, sin tocar la disposición. */
   restablecer: () => void;
+  /** Grilla de las tarjetas visibles, lista para react-grid-layout. */
+  layout: Layout;
+  guardarLayout: (l: Layout) => void;
+  restablecerDisposicion: () => void;
+  /** Hay posiciones guardadas distintas de las de fábrica. */
+  disposicionTocada: boolean;
 }
 
-const Contexto = createContext<ValorPanel>({ visibles: TODAS, ve: () => true, alternar: () => {}, restablecer: () => {} });
+const Contexto = createContext<ValorPanel>({
+  visibles: TODAS,
+  ve: () => true,
+  alternar: () => {},
+  restablecer: () => {},
+  layout: [],
+  guardarLayout: () => {},
+  restablecerDisposicion: () => {},
+  disposicionTocada: false,
+});
 export const usePanelTarjetas = () => useContext(Contexto);
 
 export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
-  const [visibles, setVisibles] = useState<IdTarjeta[]>(leer);
+  const [visibles, setVisibles] = useState<IdTarjeta[]>(leerVisibles);
+  const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(leerCajas);
 
   useEffect(() => {
     try {
       localStorage.setItem(CLAVE, JSON.stringify(visibles));
+      localStorage.setItem(CLAVE_CAJAS, JSON.stringify(cajas));
     } catch {
       /* navegación privada: la preferencia solo dura la sesión */
     }
-  }, [visibles]);
+  }, [visibles, cajas]);
 
   const alternar = useCallback(
     (id: IdTarjeta) =>
@@ -66,9 +123,48 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
     [],
   );
   const restablecer = useCallback(() => setVisibles(TODAS), []);
+  const restablecerDisposicion = useCallback(() => setCajas({}), []);
+
+  const layout = useMemo<Layout>(
+    () =>
+      TARJETAS_PANEL.filter((t) => visibles.includes(t.id)).map((t) => ({
+        i: t.id,
+        ...(cajas[t.id] ?? t.caja),
+        minW: t.min.w,
+        minH: t.min.h,
+      })),
+    [visibles, cajas],
+  );
+
+  // react-grid-layout avisa también al montar y al compactar; devolver el mismo objeto
+  // cuando nada cambió corta el ciclo render → onLayoutChange → render.
+  const guardarLayout = useCallback((l: Layout) => {
+    setCajas((prev) => {
+      let cambio = false;
+      const sig = { ...prev };
+      for (const { i, x, y, w, h } of l) {
+        const p = prev[i as IdTarjeta] ?? POR_DEFECTO[i as IdTarjeta];
+        if (p && p.x === x && p.y === y && p.w === w && p.h === h) continue;
+        sig[i as IdTarjeta] = { x, y, w, h };
+        cambio = true;
+      }
+      return cambio ? sig : prev;
+    });
+  }, []);
 
   return (
-    <Contexto.Provider value={{ visibles, ve: (id) => visibles.includes(id), alternar, restablecer }}>
+    <Contexto.Provider
+      value={{
+        visibles,
+        ve: (id) => visibles.includes(id),
+        alternar,
+        restablecer,
+        layout,
+        guardarLayout,
+        restablecerDisposicion,
+        disposicionTocada: Object.keys(cajas).length > 0,
+      }}
+    >
       {children}
     </Contexto.Provider>
   );

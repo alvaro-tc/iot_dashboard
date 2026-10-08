@@ -1,11 +1,23 @@
-// Panel principal. La grilla replica la de la referencia:
-//   fila 1: tarjeta grande (~58 %) + columna derecha con una tarjeta ancha y dos pequeñas
-//   fila 2: tres tarjetas iguales
-import { useState } from 'react';
-import { LayoutGrid, Plus } from 'lucide-react';
+// Panel principal. Las tarjetas viven en una grilla de react-grid-layout: cada cliente las
+// mueve y redimensiona a su gusto y la disposición se guarda en su navegador (lib/panel.tsx).
+//
+// El arrastre y los tiradores solo se activan en "modo edición": las tarjetas tienen dentro
+// mapas con pan y gráficas con zoom, y si el arrastre estuviera siempre activo pelearían por
+// el mismo gesto. En modo edición un velo encima de cada tarjeta se queda con el ratón.
+import React, { useState } from 'react';
+import { Check, LayoutGrid, Move, Plus, RotateCcw } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
+import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
 import { api } from '../lib/api.ts';
-import { TARJETAS_PANEL, usePanelTarjetas, type IdTarjeta } from '../lib/panel.tsx';
+import {
+  ALTO_FILA,
+  ANCHO_GRILLA,
+  COLUMNAS,
+  MARGEN,
+  TARJETAS_PANEL,
+  usePanelTarjetas,
+  type IdTarjeta,
+} from '../lib/panel.tsx';
 import { useRobots } from '../lib/robots.tsx';
 import { useSocket } from '../lib/socket.tsx';
 import type { Resumen } from '../lib/types.ts';
@@ -21,11 +33,14 @@ import { ErrorConReintento, Esqueleto, Interruptor, Modal, Vacio } from '../comp
 
 /** Elige qué tarjetas se ven. El cambio se aplica al momento: el panel lee el contexto. */
 function DialogoPersonalizar({ onCerrar }: { onCerrar: () => void }) {
-  const { ve, alternar, restablecer, visibles } = usePanelTarjetas();
+  const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles } = usePanelTarjetas();
   return (
     <Modal etiqueta="Personalizar panel" ancho="max-w-sm" onCerrar={onCerrar}>
       <h2 className="tarjeta-titulo mb-1">Personalizar panel</h2>
-      <p className="tarjeta-sub mb-5">Elige qué tarjetas quieres ver. Se guarda en este navegador.</p>
+      <p className="tarjeta-sub mb-5">
+        Elige qué tarjetas quieres ver. Para moverlas o cambiarlas de tamaño usa «Mover». Se guarda en este
+        navegador.
+      </p>
       <ul className="space-y-1">
         {TARJETAS_PANEL.map(({ id, texto, Icono }) => (
           <li key={id} className="flex items-center justify-between gap-4 rounded-2xl px-1 py-2">
@@ -39,14 +54,18 @@ function DialogoPersonalizar({ onCerrar }: { onCerrar: () => void }) {
           </li>
         ))}
       </ul>
-      {!visibles.length && (
-        <p className="mt-4 text-[13px] text-precaucion">Sin tarjetas el panel queda vacío.</p>
-      )}
-      <div className="mt-6 flex gap-2">
-        <button type="button" className="btn flex-1" onClick={restablecer}>
-          Mostrar todas
-        </button>
-        <button type="button" className="btn btn-acento flex-1" onClick={onCerrar}>
+      {!visibles.length && <p className="mt-4 text-[13px] text-precaucion">Sin tarjetas el panel queda vacío.</p>}
+      <div className="mt-6 grid gap-2">
+        <div className="flex gap-2">
+          <button type="button" className="btn flex-1" onClick={restablecer}>
+            Mostrar todas
+          </button>
+          <button type="button" className="btn flex-1" onClick={restablecerDisposicion} disabled={!disposicionTocada}>
+            <RotateCcw className="size-4" />
+            Disposición original
+          </button>
+        </div>
+        <button type="button" className="btn btn-acento" onClick={onCerrar}>
           Listo
         </button>
       </div>
@@ -57,9 +76,11 @@ function DialogoPersonalizar({ onCerrar }: { onCerrar: () => void }) {
 export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
   const { robotId } = useSocket();
-  const { ve } = usePanelTarjetas();
+  const { layout, guardarLayout } = usePanelTarjetas();
+  const { width, containerRef, mounted } = useContainerWidth();
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [personalizar, setPersonalizar] = useState(false);
+  const [editando, setEditando] = useState(false);
   const [repeticion, setRepeticion] = useState<EstadoRepeticion | null>(null);
 
   const { data: resumen } = useQuery<Resumen>({
@@ -110,53 +131,86 @@ export function Panel() {
     );
   }
 
-  const columnaDerecha = (['sesiones', 'estado', 'conectividad'] as IdTarjeta[]).some(ve);
-  const filaInferior = (['distancias', 'bateria', 'evasion'] as IdTarjeta[]).filter(ve);
-
   const evasionesHoy =
     (resumen?.evasionesIzq ?? 0) + (resumen?.evasionesCentro ?? 0) + (resumen?.evasionesDer ?? 0);
 
+  /** Una tarjeta por id. El alto del mapa es flexible: lo manda la celda de la grilla. */
+  const tarjeta = (id: IdTarjeta) => {
+    switch (id) {
+      case 'mapa':
+        return (
+          <TarjetaMapa alto="min-h-0 flex-1" repeticion={repeticion} onSalirRepeticion={() => setRepeticion(null)} />
+        );
+      case 'sesiones':
+        return <TarjetaSesiones repeticion={repeticion} onRepetir={setRepeticion} />;
+      case 'estado':
+        return <TarjetaEstado evasionesHoy={evasionesHoy} />;
+      case 'conectividad':
+        return <TarjetaConectividad pctPerdidas={resumen?.sesion?.pctPerdidas ?? null} />;
+      case 'distancias':
+        return <TarjetaDistancias />;
+      case 'bateria':
+        return <TarjetaBateria />;
+      case 'evasion':
+        return <TarjetaEvasion />;
+    }
+  };
+
+  // En una sola columna no hay nada que reordenar: los tiradores solo estorbarían.
+  const puedeEditar = width >= ANCHO_GRILLA;
+  const edicionActiva = editando && puedeEditar;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {edicionActiva && (
+          <p className="mr-auto text-[13px] text-tinta-suave">
+            Arrastra las tarjetas para colocarlas y tira del borde o de la esquina para cambiar su tamaño.
+          </p>
+        )}
+        {puedeEditar && (
+          <button
+            type="button"
+            className={`btn btn-sm ${editando ? 'btn-acento' : ''}`}
+            aria-pressed={editando}
+            onClick={() => setEditando((v) => !v)}
+          >
+            {editando ? <Check className="size-4" /> : <Move className="size-4" />}
+            {editando ? 'Listo' : 'Mover'}
+          </button>
+        )}
         <button type="button" className="btn btn-sm" onClick={() => setPersonalizar(true)}>
           <LayoutGrid className="size-4" />
           Personalizar
         </button>
       </div>
 
-      {/* ---- Fila 1: dos columnas solo si el mapa y algo de la derecha están visibles ---- */}
-      {(ve('mapa') || columnaDerecha) && (
-        <div className={`grid gap-4 ${ve('mapa') && columnaDerecha ? 'xl:grid-cols-[58fr_42fr]' : ''}`}>
-          {/* El mapa va primero también en móvil: es la pieza que se quiere ver. */}
-          {ve('mapa') && <TarjetaMapa repeticion={repeticion} onSalirRepeticion={() => setRepeticion(null)} />}
+      <div ref={containerRef as React.RefObject<HTMLDivElement>}>
+        {mounted && layout.length > 0 && (
+          <ResponsiveGridLayout
+            width={width}
+            className={edicionActiva ? 'panel-editando' : undefined}
+            layouts={{ grande: layout }}
+            breakpoints={{ grande: ANCHO_GRILLA, chico: 0 }}
+            cols={{ grande: COLUMNAS, chico: 1 }}
+            rowHeight={ALTO_FILA}
+            margin={[MARGEN, MARGEN]}
+            containerPadding={[0, 0]}
+            dragConfig={{ enabled: edicionActiva }}
+            resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
+            onLayoutChange={(_actual, todos) => guardarLayout(todos.grande ?? [])}
+          >
+            {layout.map(({ i }) => (
+              <div key={i} className="widget-panel">
+                {tarjeta(i as IdTarjeta)}
+                {edicionActiva && <div className="velo-editar" aria-hidden />}
+              </div>
+            ))}
+          </ResponsiveGridLayout>
+        )}
+      </div>
 
-          {columnaDerecha && (
-            <div className="grid content-start gap-4">
-              {ve('sesiones') && <TarjetaSesiones repeticion={repeticion} onRepetir={setRepeticion} />}
-              {(ve('estado') || ve('conectividad')) && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {ve('estado') && <TarjetaEstado evasionesHoy={evasionesHoy} />}
-                  {ve('conectividad') && (
-                    <TarjetaConectividad pctPerdidas={resumen?.sesion?.pctPerdidas ?? null} />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ---- Fila 2: tres tarjetas iguales ---- */}
-      {filaInferior.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {ve('distancias') && <TarjetaDistancias />}
-          {ve('bateria') && <TarjetaBateria />}
-          {ve('evasion') && <TarjetaEvasion />}
-        </div>
-      )}
-
-      {!ve('mapa') && !columnaDerecha && !filaInferior.length && (
+      {!layout.length && (
         <div className="tarjeta">
           <Vacio
             titulo="Panel vacío"

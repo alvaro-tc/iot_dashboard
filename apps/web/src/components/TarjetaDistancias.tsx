@@ -265,7 +265,7 @@ export function TarjetaDistancias() {
         </>
       }
     >
-      <div className="h-[220px]">
+      <div className="h-full min-h-[160px]">
         <canvas ref={canvasRef} />
       </div>
     </Tarjeta>

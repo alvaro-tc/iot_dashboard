@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Crosshair,
   Eraser,
-  Expand,
   Maximize2,
   Pause,
   Play,
@@ -48,7 +47,6 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
   const [vista, setVista] = useState<Vista>('mapa');
   const [seguir, setSeguir] = useState(true);
   const [haces, setHaces] = useState(true);
-  const [ampliada, setAmpliada] = useState(false);
   const [enviando, setEnviando] = useState<string | null>(null);
   const mapa = useRef<MapaApi>(null);
 
@@ -102,7 +100,6 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
   );
 
   const enMarcha = cfg.modo === 'automatico';
-  const altoRecuadro = ampliada ? 'h-[520px] sm:h-[640px]' : alto;
 
   return (
     <section className="tarjeta flex flex-col">
@@ -138,7 +135,7 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
       </header>
 
       {/* ---- Recuadro oscuro ---- */}
-      <div className={`relative overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${altoRecuadro}`}>
+      <div className={`relative overflow-hidden rounded-[1.25rem] bg-[#0f172a] ${alto}`}>
         {vista === 'mapa' ? (
           <MapaVivo
             ref={mapa}
@@ -237,13 +234,6 @@ export function TarjetaMapa({ alto = 'h-[300px] sm:h-[380px]', repeticion = null
             onClick={() => comando('detener')}
           >
             <Square className="size-4" />
-          </BotonMapa>
-          <BotonMapa
-            etiqueta={ampliada ? 'Vista normal' : 'Vista ampliada'}
-            acento={ampliada}
-            onClick={() => setAmpliada((v) => !v)}
-          >
-            <Expand className="size-4" />
           </BotonMapa>
           <BotonMapa etiqueta="Captura PNG" onClick={capturar} disabled={vista !== 'mapa'}>
             <Camera className="size-4" />

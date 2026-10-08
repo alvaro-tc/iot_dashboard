@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'react-grid-layout/css/styles.css';
 
 /* Tema oscuro por clase en <html data-tema="oscuro">, no por media query:
    el usuario puede forzarlo desde el toggle y queda guardado en localStorage. */
@@ -180,5 +181,36 @@ body {
   }
   .esqueleto {
     @apply animate-pulse rounded-xl bg-tarjeta-tenue;
+  }
+
+  /* ---------- Grilla del panel (react-grid-layout) ---------- */
+  /* La celda manda el alto: la tarjeta lo rellena y recorta lo que no entre. */
+  .widget-panel {
+    @apply relative h-full;
+  }
+  .widget-panel > .tarjeta {
+    @apply h-full overflow-hidden;
+    animation: none; /* la animación de entrada parpadearía en cada arrastre */
+  }
+  /* Velo de modo edición: se queda con el ratón para que no lo capturen el mapa ni las
+     gráficas, que tienen pan y zoom propios. */
+  .velo-editar {
+    @apply absolute inset-0 z-10 cursor-move rounded-[var(--radius-tarjeta)] bg-acento/5 ring-2 ring-acento/40;
+  }
+  /* Por encima del velo (z-10), o el velo se queda también con los tiradores. */
+  .react-grid-item > .react-resizable-handle {
+    z-index: 20;
+  }
+  .panel-editando .react-grid-item > .react-resizable-handle {
+    opacity: 1;
+  }
+  .react-grid-item > .react-resizable-handle::after {
+    @apply border-acento;
+    width: 8px;
+    height: 8px;
+  }
+  .react-grid-item.react-grid-placeholder {
+    @apply bg-acento rounded-[var(--radius-tarjeta)];
+    opacity: 0.25;
   }
 }
