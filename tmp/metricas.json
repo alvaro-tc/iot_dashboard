@@ -1,0 +1,34 @@
+{
+  "resumen": {
+    "segundosHoy": "481.732399",
+    "distanciaHoyCm": "468.1",
+    "evasionesIzq": 59,
+    "evasionesCentro": 86,
+    "evasionesDer": 62,
+    "latenciaMs": "2.6040361864996521",
+    "bateriaPct": 97,
+    "movimientos": {
+      "avanzando": 260,
+      "girando_izq": 701,
+      "girando_der": 700,
+      "retrocediendo": 76,
+      "detenido": 569
+    },
+    "mensajesPorSegundo": 5,
+    "sesion": {
+      "id": 9,
+      "iniciadaEn": 1791506471911,
+      "lecturas": 2255,
+      "evasiones": 207,
+      "distanciaCm": 534.9,
+      "pctPerdidas": 0
+    }
+  },
+  "salud": {
+    "ok": true,
+    "postgres": true,
+    "mosquitto": true,
+    "bufferPersistencia": 4,
+    "clientesWebSocket": 2
+  }
+}

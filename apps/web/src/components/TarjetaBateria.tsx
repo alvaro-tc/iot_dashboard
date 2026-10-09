@@ -61,13 +61,16 @@ export function TarjetaBateria() {
   return (
     <Tarjeta titulo="Batería" pie={lectura?.bateriaV != null ? <Chip>{voltios(lectura.bateriaV)}</Chip> : undefined}>
       <div className="flex h-full min-h-0 items-center justify-center">
-        {/* El semicírculo ocupa 2:1, así que la caja lo es también: el centro del dial
-            cae en su borde inferior y el número se alinea justo encima. */}
+        {/* El semicírculo ocupa 2:1, así que la caja lo es también: el centro del dial cae en
+            su borde inferior. El hueco (cutout 72%) ocupa el 72% del radio = 72% de la altura
+            de la caja desde abajo; el número se centra dentro de ese hueco. */}
         <div className="relative aspect-[2/1] w-full max-w-[220px]">
           <Gauge pct={pct} color={color} />
-          <div className="pointer-events-none absolute inset-x-0 bottom-[8%] text-center">
-            <p className="text-[34px] leading-[1] font-bold tabular-nums">{Math.round(pct)}</p>
-            <p className="text-[12px] leading-[1.1] text-tinta-suave">por ciento</p>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[72%] flex-col items-center justify-center">
+            <p className="text-[32px] leading-none font-bold tabular-nums">
+              {Math.round(pct)}
+              <span className="ml-0.5 text-[15px] font-semibold text-tinta-suave">%</span>
+            </p>
           </div>
         </div>
       </div>
