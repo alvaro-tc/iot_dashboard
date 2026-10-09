@@ -319,8 +319,6 @@ export function Panel() {
     );
   }
 
-  const evasionesHoy =
-    (resumen?.evasionesIzq ?? 0) + (resumen?.evasionesCentro ?? 0) + (resumen?.evasionesDer ?? 0);
 
   /** Una tarjeta por id. El alto del mapa es flexible: lo manda la celda de la grilla. */
   const tarjeta = (id: IdTarjeta) => {
@@ -332,7 +330,7 @@ export function Panel() {
       case 'sesiones':
         return <TarjetaSesiones repeticion={repeticion} onRepetir={setRepeticion} />;
       case 'estado':
-        return <TarjetaEstado evasionesHoy={evasionesHoy} />;
+        return <TarjetaEstado />;
       case 'conectividad':
         return <TarjetaConectividad pctPerdidas={resumen?.sesion?.pctPerdidas ?? null} />;
       case 'distancias':

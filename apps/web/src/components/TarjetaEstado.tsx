@@ -2,9 +2,9 @@
 // Fondo degradado según el estado, velocidad de cada rueda y LED virtual.
 import { useEffect, useState } from 'react';
 import { CONFIG_POR_DEFECTO, type Movimiento } from '@iot/shared';
-import { NOMBRE_MOVIMIENTO, NOMBRE_SENSOR, cm } from '../lib/formato.ts';
+import { NOMBRE_MOVIMIENTO } from '../lib/formato.ts';
 import { useSocket, useUltimaLectura } from '../lib/socket.tsx';
-import { Tarjeta } from './ui.tsx';
+import { Badge, Tarjeta } from './ui.tsx';
 
 /** Degradado de fondo por estado, con versión desaturada para el tema oscuro. */
 const FONDO: Record<Movimiento | 'atascado', string> = {
@@ -61,8 +61,8 @@ function BarraRueda({ etiqueta, pct }: { etiqueta: string; pct: number }) {
   );
 }
 
-export function TarjetaEstado({ evasionesHoy }: { evasionesHoy: number }) {
-  const { config } = useSocket();
+export function TarjetaEstado() {
+  const { config, estado, estadoRobot } = useSocket();
   const lectura = useUltimaLectura(3);
   const cfg = config ?? CONFIG_POR_DEFECTO;
 
@@ -87,6 +87,7 @@ export function TarjetaEstado({ evasionesHoy }: { evasionesHoy: number }) {
         : 'lento';
   const led = useParpadeo(lectura ? patron : 'apagado');
 
+  const conectado = estado === 'conectado' && !!estadoRobot?.enLinea;
   const fondo = FONDO[atascado ? 'atascado' : movimiento];
 
   return (
@@ -106,19 +107,9 @@ export function TarjetaEstado({ evasionesHoy }: { evasionesHoy: number }) {
         {atascado ? 'Atascado' : NOMBRE_MOVIMIENTO[movimiento]}
       </p>
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
-        <div>
-          <dt className="text-tinta-suave">Obstáculo más cercano</dt>
-          <dd className="font-medium tabular-nums">
-            {masCercano ? `${cm(masCercano.d)}` : '—'}
-            {masCercano && <span className="font-normal text-tinta-suave"> ({NOMBRE_SENSOR[masCercano.sensor]})</span>}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-tinta-suave">Evasiones hoy</dt>
-          <dd className="font-medium tabular-nums">{evasionesHoy}</dd>
-        </div>
-      </dl>
+      <div className="mt-3">
+        <Badge tono={conectado ? 'ok' : 'neutro'}>{conectado ? 'Conectado' : 'Desconectado'}</Badge>
+      </div>
 
       <div className="mt-4 space-y-3">
         <BarraRueda etiqueta="Rueda izquierda" pct={lectura?.velIzqPct ?? 0} />

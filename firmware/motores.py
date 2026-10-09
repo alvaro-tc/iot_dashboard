@@ -1,118 +1,87 @@
-# Tracción diferencial con puente H.
-#
-# Por defecto TB6612FNG; cambiando DRIVER a "l298n" en config.py funciona igual con un L298N
-# (ENA/IN1/IN2 y ENB/IN3/IN4), porque la interfaz es la misma: PWM + dos pines de sentido.
-# Lo único que cambia es que el L298N no tiene STBY.
-import machine
-import time
 
-import config
+# motores.py
 
-# Rampa: cuánto puede cambiar el PWM de una rueda en cada paso del bucle de control.
-# Sin rampa, pasar de 0 a 60 % de golpe hace patinar las ruedas, y la odometría cuenta un
-# avance que no ocurrió.
-RAMPA_PCT_POR_PASO = 12
+from machine import Pin, PWM
+import configuracion as cfg
 
 
-def _recorta(v, minimo=-100, maximo=100):
-    return max(minimo, min(maximo, v))
+class ControlMotores:
 
-
-class Motor:
-    """Una rueda: PWM con signo de -100 a 100."""
-
-    def __init__(self, pin_pwm, pin_in1, pin_in2, invertir=False, factor=1.0):
-        self.pwm = machine.PWM(machine.Pin(pin_pwm), freq=config.PWM_FREQ)
-        self.in1 = machine.Pin(pin_in1, machine.Pin.OUT)
-        self.in2 = machine.Pin(pin_in2, machine.Pin.OUT)
-        self.invertir = invertir
-        self.factor = factor
-        self.velocidad = 0
-        self.aplicar(0)
-
-    def aplicar(self, pct):
-        """pct de -100 a 100. Negativo = marcha atrás, 0 = parado."""
-        pct = _recorta(int(pct))
-        self.velocidad = pct
-        efectivo = pct * self.factor
-        if self.invertir:
-            efectivo = -efectivo
-
-        if efectivo > 0:
-            self.in1.value(1)
-            self.in2.value(0)
-        elif efectivo < 0:
-            self.in1.value(0)
-            self.in2.value(1)
-        else:
-            # Freno: ambos pines a 1 para que no siga rodando por inercia.
-            self.in1.value(1)
-            self.in2.value(1)
-
-        self.pwm.duty_u16(int(min(100, abs(efectivo)) / 100 * 65535))
-
-
-class Traccion:
     def __init__(self):
-        self.izq = Motor(
-            config.PIN_PWMA, config.PIN_AIN1, config.PIN_AIN2, config.INVERTIR_IZQ, config.FACTOR_IZQ
+        self.ain1 = Pin(cfg.PIN_AIN1, Pin.OUT)
+        self.ain2 = Pin(cfg.PIN_AIN2, Pin.OUT)
+        self.bin1 = Pin(cfg.PIN_BIN1, Pin.OUT)
+        self.bin2 = Pin(cfg.PIN_BIN2, Pin.OUT)
+
+        self.stby = Pin(cfg.PIN_STBY, Pin.OUT)
+
+        self.pwm_izquierdo = PWM(
+            Pin(cfg.PIN_PWMA),
+            freq=cfg.FRECUENCIA_PWM,
+            duty=0
         )
-        self.der = Motor(
-            config.PIN_PWMB, config.PIN_BIN1, config.PIN_BIN2, config.INVERTIR_DER, config.FACTOR_DER
+
+        self.pwm_derecho = PWM(
+            Pin(cfg.PIN_PWMB),
+            freq=cfg.FRECUENCIA_PWM,
+            duty=0
         )
 
-        # El TB6612FNG queda en alta impedancia mientras STBY esté a 0.
-        self.stby = None
-        if config.DRIVER == "tb6612":
-            self.stby = machine.Pin(config.PIN_STBY, machine.Pin.OUT)
-            self.stby.value(1)
+        self.velocidad_izquierda = 0
+        self.velocidad_derecha = 0
 
-        self._objetivo_izq = 0
-        self._objetivo_der = 0
+        self.stby.value(1)
+        self.detener()
 
-    # --- Órdenes de alto nivel: fijan el objetivo, la rampa hace el resto ---
+    def limitar_pwm(self, valor):
+        valor = int(valor)
+        return max(-cfg.PWM_MAXIMO,
+                   min(cfg.PWM_MAXIMO, valor))
 
-    def set_ruedas(self, izq, der):
-        self._objetivo_izq = _recorta(int(izq))
-        self._objetivo_der = _recorta(int(der))
+    def aplicar_motor(self, velocidad, pin1, pin2, pwm):
+        velocidad = self.limitar_pwm(velocidad)
 
-    def avanzar(self, vel):
-        self.set_ruedas(vel, vel)
+        if velocidad > 0:
+            pin1.value(1)
+            pin2.value(0)
 
-    def retroceder(self, vel):
-        self.set_ruedas(-abs(vel), -abs(vel))
+        elif velocidad < 0:
+            pin1.value(0)
+            pin2.value(1)
 
-    def girar_izq(self, vel):
-        """Gira sobre su eje hacia la izquierda: ruedas en sentidos opuestos."""
-        self.set_ruedas(-abs(vel), abs(vel))
+        else:
+            pin1.value(0)
+            pin2.value(0)
 
-    def girar_der(self, vel):
-        self.set_ruedas(abs(vel), -abs(vel))
+        ciclo = int(
+            abs(velocidad) * 65535 / cfg.PWM_MAXIMO
+        )
+
+        # API PWM de MicroPython para ESP32 actual.
+        pwm.duty_u16(ciclo)
+
+        return velocidad
+
+    def establecer_velocidades(self, izquierda, derecha):
+        self.velocidad_izquierda = self.aplicar_motor(
+            izquierda,
+            self.ain1,
+            self.ain2,
+            self.pwm_izquierdo
+        )
+
+        self.velocidad_derecha = self.aplicar_motor(
+            derecha,
+            self.bin1,
+            self.bin2,
+            self.pwm_derecho
+        )
 
     def detener(self):
-        self.set_ruedas(0, 0)
-        # El freno se aplica ya, sin esperar a la rampa: detener tiene que ser inmediato.
-        self.izq.aplicar(0)
-        self.der.aplicar(0)
+        self.establecer_velocidades(0, 0)
 
-    def actualizar(self):
-        """
-        Acerca el PWM real al objetivo un escalón de rampa. Hay que llamarlo cada paso del
-        bucle de control.
-        """
-        for motor, objetivo in ((self.izq, self._objetivo_izq), (self.der, self._objetivo_der)):
-            delta = objetivo - motor.velocidad
-            if delta == 0:
-                continue
-            paso = max(-RAMPA_PCT_POR_PASO, min(RAMPA_PCT_POR_PASO, delta))
-            motor.aplicar(motor.velocidad + paso)
-
-    @property
-    def velocidades(self):
-        """(izq, der) en PWM con signo: lo que se publica como `vi` y `vd`."""
-        return self.izq.velocidad, self.der.velocidad
-
-    def apagar(self):
-        self.detener()
-        if self.stby:
-            self.stby.value(0)
+    def obtener_estado(self):
+        return {
+            "izquierda_pwm": self.velocidad_izquierda,
+            "derecha_pwm": self.velocidad_derecha
+        }
