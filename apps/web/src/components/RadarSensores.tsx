@@ -11,12 +11,28 @@ import { useEffect, useRef } from 'react';
 import { DIST_VISTA_CM, estadoDistancia, type Configuracion, type Lectura, type Sensor } from '@iot/shared';
 import { Chart } from '../lib/chart.ts';
 import { NOMBRE_MOVIMIENTO, NOMBRE_SENSOR } from '../lib/formato.ts';
+import { usePanelTarjetas, type TemaRadar } from '../lib/panel.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 
 const SENSORES: Sensor[] = ['izq', 'centro', 'der'];
 const SEMIANCHO_DEG = 18;
 const ANILLOS = [25, 50, 75, 100];
 const RASTRO = 6; // últimas lecturas que dejan estela
+
+/**
+ * Un tono por sensor. No salen del tema porque no significan estado: son identidad, y tienen
+ * que seguir siendo tres colores distinguibles encima del recuadro oscuro (que es oscuro en
+ * los dos temas). Elegidos separados también en luminosidad, para quien no distingue el tono.
+ */
+export const TONO_SENSOR: Record<Sensor, string> = { izq: '#38bdf8', centro: '#c084fc', der: '#fb923c' };
+
+/** Lo único que cambia entre paletas: cuánto rellena la banda activa, cuánto las otras, y si
+    se marca el borde del sector. */
+const AJUSTE: Record<TemaRadar, { activa: number; tenue: number; borde: number }> = {
+  estado: { activa: 0.42, tenue: 0.07, borde: 0 },
+  sensor: { activa: 0.45, tenue: 0.09, borde: 0.22 },
+  contraste: { activa: 0.68, tenue: 0.16, borde: 0.45 },
+};
 
 interface Props {
   config: Configuracion;
@@ -27,9 +43,16 @@ export function RadarSensores({ config, lectura }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
+  const { temaRadar } = usePanelTarjetas();
 
   const configRef = useRef(config);
   configRef.current = config;
+  const temaRef = useRef(temaRadar);
+  temaRef.current = temaRadar;
+  // El plugin se crea una sola vez, así que no puede cerrar sobre `colores`: al cambiar de tema
+  // seguiría pintando con los de antes. Lee el ref, que sí está al día.
+  const coloresRef = useRef(colores);
+  coloresRef.current = colores;
   const actual = useRef<Lectura | null>(lectura);
   actual.current = lectura;
   const rastro = useRef<Record<Sensor, number[]>>({ izq: [], centro: [], der: [] });
@@ -64,6 +87,9 @@ export function RadarSensores({ config, lectura }: Props) {
       const escala = radio / DIST_VISTA_CM;
       const cfg = configRef.current;
       const l = actual.current;
+      const colores = coloresRef.current;
+      const ajuste = AJUSTE[temaRef.current];
+      const porSensor = temaRef.current === 'sensor';
 
       // El 0° del radar apunta "hacia arriba" en pantalla. El ángulo del sensor es relativo
       // al frente del robot, así que se convierte a ángulo de lienzo restando 90°.
@@ -93,15 +119,18 @@ export function RadarSensores({ config, lectura }: Props) {
         const hasta = aLienzo(centroDeg + SEMIANCHO_DEG);
         const estado = estadoDistancia(d, cfg);
 
+        // En la paleta "sensor" las tres bandas van del tono del sensor: lo que se pregunta es
+        // cuál de los tres ve algo, y el peligro lo sigue diciendo a qué distancia está el punto.
+        const tono = TONO_SENSOR[sensor];
         const bandas: [number, number, string][] = [
-          [0, cfg.distanciaEvasionCm, colores.evasion],
-          [cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm, colores.precaucion],
-          [cfg.distanciaPrecaucionCm, DIST_VISTA_CM, colores.libre],
+          [0, cfg.distanciaEvasionCm, porSensor ? tono : colores.evasion],
+          [cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm, porSensor ? tono : colores.precaucion],
+          [cfg.distanciaPrecaucionCm, DIST_VISTA_CM, porSensor ? tono : colores.libre],
         ];
 
         for (const [desdeCm, hastaCm, color] of bandas) {
           const dentro = d !== null && d > desdeCm && d <= hastaCm;
-          ctx.globalAlpha = dentro ? 0.42 : 0.07;
+          ctx.globalAlpha = dentro ? ajuste.activa : ajuste.tenue;
           ctx.fillStyle = color;
           ctx.beginPath();
           ctx.arc(cx, cy, hastaCm * escala, desde, hasta);
@@ -109,14 +138,41 @@ export function RadarSensores({ config, lectura }: Props) {
           ctx.closePath();
           ctx.fill();
         }
+
+        // Borde del sector: separa los tres sectores cuando los rellenos se parecen.
+        if (ajuste.borde) {
+          ctx.globalAlpha = ajuste.borde;
+          ctx.strokeStyle = porSensor ? tono : '#ffffff';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(cx, cy, DIST_VISTA_CM * escala, desde, hasta);
+          ctx.arc(cx, cy, 0, hasta, desde, true);
+          ctx.closePath();
+          ctx.stroke();
+        }
         ctx.globalAlpha = 1;
+
+        // Nombre del sensor en el borde exterior de su sector, siempre: sin él hay que recordar
+        // qué sector es cuál, y los ángulos se configuran (pueden no estar donde uno espera).
+        const aCentro = aLienzo(centroDeg);
+        ctx.fillStyle = tono;
+        ctx.font = '600 11px system-ui';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // Abreviado (IZQ/CEN/DER): el nombre entero se sale del lienzo en los sectores laterales.
+        ctx.fillText(
+          NOMBRE_SENSOR[sensor].slice(0, 3).toUpperCase(),
+          cx + Math.cos(aCentro) * radio * 0.9,
+          cy + Math.sin(aCentro) * radio * 0.9,
+        );
+        ctx.textBaseline = 'alphabetic';
 
         // Estela de las últimas lecturas, de más tenue a más viva.
         const historia = rastro.current[sensor];
-        const a = aLienzo(centroDeg);
+        const a = aCentro;
         historia.forEach((valor, i) => {
           ctx.globalAlpha = 0.12 + (0.5 * (i + 1)) / historia.length;
-          ctx.fillStyle = colores.tintaSuave;
+          ctx.fillStyle = porSensor ? tono : colores.tintaSuave;
           ctx.beginPath();
           ctx.arc(cx + Math.cos(a) * valor * escala, cy + Math.sin(a) * valor * escala, 2, 0, Math.PI * 2);
           ctx.fill();
@@ -124,16 +180,27 @@ export function RadarSensores({ config, lectura }: Props) {
         ctx.globalAlpha = 1;
 
         // Punto del obstáculo actual
+        // El punto lleva SIEMPRE las dos cosas: relleno y anillo, estado y sensor. Lo que cambia
+        // con la paleta es cuál de las dos va dentro, que es la que se lee de un vistazo.
         if (d !== null) {
           const color = estado === 'evasion' ? colores.evasion : estado === 'precaucion' ? colores.precaucion : colores.libre;
-          ctx.fillStyle = color;
+          const px = cx + Math.cos(a) * d * escala;
+          const py = cy + Math.sin(a) * d * escala;
+          ctx.fillStyle = porSensor ? tono : color;
+          ctx.strokeStyle = porSensor ? color : tono;
+          ctx.lineWidth = 2.5;
           ctx.beginPath();
-          ctx.arc(cx + Math.cos(a) * d * escala, cy + Math.sin(a) * d * escala, 5, 0, Math.PI * 2);
+          ctx.arc(px, py, 5, 0, Math.PI * 2);
           ctx.fill();
-          ctx.fillStyle = '#ffffff';
+          ctx.stroke();
+          // Cifra con contorno oscuro: encima de una banda clara, el blanco solo se perdía.
           ctx.font = '600 11px system-ui';
           ctx.textAlign = 'center';
-          ctx.fillText(`${d.toFixed(0)}`, cx + Math.cos(a) * d * escala, cy + Math.sin(a) * d * escala - 10);
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = 'rgba(2,6,23,0.85)';
+          ctx.strokeText(`${d.toFixed(0)}`, px, py - 11);
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(`${d.toFixed(0)}`, px, py - 11);
         }
       }
 
@@ -188,7 +255,7 @@ export function RadarSensores({ config, lectura }: Props) {
   // Repinta en cada lectura y al cambiar de tema.
   useEffect(() => {
     chartRef.current?.update('none');
-  }, [lectura, colores.tema]);
+  }, [lectura, colores.tema, temaRadar]);
 
   const resumen = lectura
     ? SENSORES.map((s) => {

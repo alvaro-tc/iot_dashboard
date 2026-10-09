@@ -65,9 +65,9 @@ export function TarjetaBateria() {
             cae en su borde inferior y el número se alinea justo encima. */}
         <div className="relative aspect-[2/1] w-full max-w-[220px]">
           <Gauge pct={pct} color={color} />
-          <div className="pointer-events-none absolute inset-x-0 bottom-0 text-center">
-            <p className="text-[34px] leading-none font-bold tabular-nums">{Math.round(pct)}</p>
-            <p className="text-[13px] leading-tight text-tinta-suave">por ciento</p>
+          <div className="pointer-events-none absolute inset-x-0 bottom-[8%] text-center">
+            <p className="text-[34px] leading-[1] font-bold tabular-nums">{Math.round(pct)}</p>
+            <p className="text-[12px] leading-[1.1] text-tinta-suave">por ciento</p>
           </div>
         </div>
       </div>

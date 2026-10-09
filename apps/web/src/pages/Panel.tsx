@@ -41,6 +41,7 @@ import {
   MARGEN,
   MINIATURA,
   TARJETAS_PANEL,
+  TEMAS_RADAR,
   usePanelTarjetas,
   type IdTarjeta,
 } from '../lib/panel.tsx';
@@ -181,7 +182,7 @@ function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
 
 /** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
 function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
-  const { layout, fijarTamano } = usePanelTarjetas();
+  const { layout, fijarTamano, temaRadar, fijarTemaRadar } = usePanelTarjetas();
   const { texto, min } = TARJETAS_PANEL.find((t) => t.id === id)!;
   const caja = layout.find((l) => l.i === id);
   const w = caja?.w ?? min.w;
@@ -214,6 +215,25 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
             opciones={ALTOS.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
           />
         </div>
+        {/* Opción propia del radar: con qué criterio se colorean los tres sensores. */}
+        {id === 'radar' && (
+          <div>
+            <span className="etiqueta">Colores</span>
+            <Segmentado
+              etiqueta="Paleta del radar"
+              valor={temaRadar}
+              onCambiar={fijarTemaRadar}
+              opciones={TEMAS_RADAR.map((o) => ({ valor: o.valor, texto: o.texto }))}
+            />
+            <p className="mt-1.5 text-[12px] text-tinta-suave">
+              {temaRadar === 'estado'
+                ? 'Rojo, ámbar y verde según la distancia al obstáculo.'
+                : temaRadar === 'sensor'
+                  ? 'Un tono por sensor: se ve de un golpe cuál de los tres detecta.'
+                  : 'Más saturación y bordes marcados, para proyector o poca luz.'}
+            </p>
+          </div>
+        )}
       </div>
       <button type="button" className="btn btn-acento mt-6 w-full" onClick={onCerrar}>
         Listo

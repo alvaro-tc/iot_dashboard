@@ -72,6 +72,19 @@ export const ALTOS = [
   { valor: 6, texto: 'Alto' },
 ] as const;
 
+/**
+ * Paletas del radar: con qué criterio se colorean los tres sensores. Se elige al editar el
+ * widget porque depende de para qué se mire: `estado` responde "¿hay peligro?" (rojo/ámbar/
+ * verde en los tres sectores por igual), `sensor` responde "¿cuál de los tres lo ve?" (un tono
+ * por sensor) y `contraste` es `estado` subido de intensidad, para pantallas malas o proyector.
+ */
+export const TEMAS_RADAR = [
+  { valor: 'estado', texto: 'Estado' },
+  { valor: 'sensor', texto: 'Sensor' },
+  { valor: 'contraste', texto: 'Contraste' },
+] as const;
+export type TemaRadar = (typeof TEMAS_RADAR)[number]['valor'];
+
 export type IdTarjeta = (typeof TARJETAS_PANEL)[number]['id'];
 interface Caja {
   x: number;
@@ -86,6 +99,7 @@ interface Caja {
 // que le falta una tarjeta.
 const CLAVE = 'panel-tarjetas-v2';
 const CLAVE_CAJAS = 'panel-disposicion-v3';
+const CLAVE_RADAR = 'panel-radar-tema';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 const POR_DEFECTO = Object.fromEntries(TARJETAS_PANEL.map((t) => [t.id, t.caja])) as Record<IdTarjeta, Caja>;
 
@@ -121,6 +135,16 @@ function leerCajas(): Partial<Record<IdTarjeta, Caja>> {
   }
 }
 
+/** Igual que el resto: un valor desconocido (versión vieja, usuario curioso) cae al de fábrica. */
+function leerTemaRadar(): TemaRadar {
+  try {
+    const v = localStorage.getItem(CLAVE_RADAR);
+    return TEMAS_RADAR.some((t) => t.valor === v) ? (v as TemaRadar) : 'estado';
+  } catch {
+    return 'estado';
+  }
+}
+
 interface ValorPanel {
   visibles: IdTarjeta[];
   ve: (id: IdTarjeta) => boolean;
@@ -135,6 +159,9 @@ interface ValorPanel {
   fijarTamano: (id: IdTarjeta, w: number, h: number) => void;
   /** Hay posiciones guardadas distintas de las de fábrica. */
   disposicionTocada: boolean;
+  /** Paleta del radar. La lee el propio radar, también el de /mapa: es una sola preferencia. */
+  temaRadar: TemaRadar;
+  fijarTemaRadar: (t: TemaRadar) => void;
 }
 
 const Contexto = createContext<ValorPanel>({
@@ -147,21 +174,25 @@ const Contexto = createContext<ValorPanel>({
   restablecerDisposicion: () => {},
   fijarTamano: () => {},
   disposicionTocada: false,
+  temaRadar: 'estado',
+  fijarTemaRadar: () => {},
 });
 export const usePanelTarjetas = () => useContext(Contexto);
 
 export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   const [visibles, setVisibles] = useState<IdTarjeta[]>(leerVisibles);
   const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(leerCajas);
+  const [temaRadar, setTemaRadar] = useState<TemaRadar>(leerTemaRadar);
 
   useEffect(() => {
     try {
       localStorage.setItem(CLAVE, JSON.stringify(visibles));
       localStorage.setItem(CLAVE_CAJAS, JSON.stringify(cajas));
+      localStorage.setItem(CLAVE_RADAR, temaRadar);
     } catch {
       /* navegación privada: la preferencia solo dura la sesión */
     }
-  }, [visibles, cajas]);
+  }, [visibles, cajas, temaRadar]);
 
   const alternar = useCallback(
     (id: IdTarjeta) =>
@@ -224,6 +255,8 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
         restablecerDisposicion,
         fijarTamano,
         disposicionTocada: Object.keys(cajas).length > 0,
+        temaRadar,
+        fijarTemaRadar: setTemaRadar,
       }}
     >
       {children}

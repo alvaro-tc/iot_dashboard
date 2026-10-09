@@ -24,11 +24,12 @@ import {
 } from 'lucide-react';
 import { CONFIG_POR_DEFECTO, type Lectura } from '@iot/shared';
 import { cm, distancia, fraseEstado, grados } from '../lib/formato.ts';
+import { usePanelTarjetas } from '../lib/panel.tsx';
 import { useRobots } from '../lib/robots.tsx';
 import { useSocket, useTelemetria, useUltimaLectura } from '../lib/socket.tsx';
 import { useToast } from '../lib/toast.tsx';
 import { MapaVivo, type MapaApi, type Pose } from './MapaVivo.tsx';
-import { RadarSensores } from './RadarSensores.tsx';
+import { RadarSensores, TONO_SENSOR } from './RadarSensores.tsx';
 import { BadgeVivo, BotonMapa, Segmentado } from './ui.tsx';
 
 type Vista = 'mapa' | 'radar';
@@ -55,6 +56,7 @@ export function TarjetaMapa({
   const { config, estadoRobot, estado, enviarComando, historial, idConexion } = useSocket();
   const toast = useToast();
   const lectura = useUltimaLectura(4);
+  const { temaRadar } = usePanelTarjetas();
 
   const [vistaLibre, setVistaLibre] = useState<Vista>('mapa');
   const vista = vistaFija ?? vistaLibre;
@@ -296,10 +298,20 @@ export function TarjetaMapa({
           {/* Leyenda. Los colores de los sensores valen para las dos vistas; la trayectoria solo
               existe en el mapa. */}
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-tinta-suave">
-            {vista === 'mapa' && <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>}
-            <Leyenda color="var(--color-evasion)">Obstáculo / evasión</Leyenda>
-            <Leyenda color="var(--color-precaucion)">Precaución</Leyenda>
-            <Leyenda color="var(--color-libre)">Libre</Leyenda>
+            {vista === 'radar' && temaRadar === 'sensor' ? (
+              <>
+                <Leyenda color={TONO_SENSOR.izq}>Izquierdo</Leyenda>
+                <Leyenda color={TONO_SENSOR.centro}>Central</Leyenda>
+                <Leyenda color={TONO_SENSOR.der}>Derecho</Leyenda>
+              </>
+            ) : (
+              <>
+                {vista === 'mapa' && <Leyenda color="var(--color-acento)">Trayectoria</Leyenda>}
+                <Leyenda color="var(--color-evasion)">Obstáculo / evasión</Leyenda>
+                <Leyenda color="var(--color-precaucion)">Precaución</Leyenda>
+                <Leyenda color="var(--color-libre)">Libre</Leyenda>
+              </>
+            )}
           </div>
         </>
       )}
