@@ -46,12 +46,11 @@ export function usoAcumulado(lecturas: Lectura[], motor: Motor): { x: number; y:
 }
 
 /**
- * Segundos de motores en marcha hoy. El servidor cuenta las lecturas en las que alguna rueda
+ * Lecturas en marcha -> segundos de uso. El servidor cuenta las lecturas en las que la rueda
  * tenía PWM, y cada lectura vale un intervalo de telemetría.
  */
-export function segundosMotores(resumen: Resumen): number {
-  return ((resumen.lecturasEnMarchaHoy ?? 0) * INTERVALO_TELEMETRIA_MS) / 1000;
-}
+export const segundosDeLecturas = (lecturas: number | null | undefined): number =>
+  ((lecturas ?? 0) * INTERVALO_TELEMETRIA_MS) / 1000;
 
 interface Contexto {
   resumen: Resumen;
@@ -69,9 +68,35 @@ export const METRICAS = [
     valor: 'motores-hoy',
     texto: 'Motores en marcha',
     alcance: 'Hoy',
-    calc: ({ resumen }: Contexto) => duracion(segundosMotores(resumen)),
+    calc: ({ resumen }: Contexto) => duracion(segundosDeLecturas(resumen.lecturasEnMarchaHoy)),
   },
   { valor: 'uso-hoy', texto: 'Tiempo de uso', alcance: 'Hoy', calc: ({ resumen }: Contexto) => duracion(resumen.segundosHoy) },
+  // Acumulados de toda la vida del robot. Los de motor salen de contar sus lecturas con PWM
+  // en la base, asi que aqui si hay total por rueda (en la ventana en vivo no haria falta).
+  {
+    valor: 'uso-total',
+    texto: 'Tiempo de uso',
+    alcance: 'Total',
+    calc: ({ resumen }: Contexto) => duracion(resumen.segundosTotal),
+  },
+  {
+    valor: 'motores-total',
+    texto: 'Motores en marcha',
+    alcance: 'Total',
+    calc: ({ resumen }: Contexto) => duracion(segundosDeLecturas(resumen.lecturasEnMarchaTotal)),
+  },
+  {
+    valor: 'motor-izq-total',
+    texto: 'Motor izquierdo en marcha',
+    alcance: 'Total',
+    calc: ({ resumen }: Contexto) => duracion(segundosDeLecturas(resumen.lecturasMarchaIzquierdaTotal)),
+  },
+  {
+    valor: 'motor-der-total',
+    texto: 'Motor derecho en marcha',
+    alcance: 'Total',
+    calc: ({ resumen }: Contexto) => duracion(segundosDeLecturas(resumen.lecturasMarchaDerechaTotal)),
+  },
   // El servidor no guarda el PWM por rueda agregado, asi que el tiempo de cada motor por
   // separado solo se puede medir sobre la telemetria en memoria. Es el total de su grafica.
   {

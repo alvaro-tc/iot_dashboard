@@ -132,12 +132,7 @@ en español, igual que en el firmware del ESP32.
 > `9002` | `roomba-sala` | `43` | `40.1` | `14.2` | `NULL` | `-145` | `145` | `12.28` | `91` | `10:31:03`
 > `9003` | `roomba-sala` | `43` | `39.8` | `35.0` | `70.4` | `0` | `0` | `12.28` | `91` | `10:31:03`
 >
-> Resalta en la tabla, con color, y conéctalo con flechas cortas a su anotación fuera de la
-> rejilla:
-> - la celda `NULL` de `distancia_derecha_cm` → "el eco no volvió: nada en rango"
-> - las dos celdas `180` y `180` de la primera fila → "mismo signo = avanza"
-> - las dos celdas `-145` y `145` de la segunda fila → "signos opuestos = gira"
-> - las dos celdas `0` y `0` de la tercera fila → "detenido"
+
 >
 > Ilustraciones pequeñas a los lados, siempre unidas por flecha a su columna y sin tapar la tabla:
 > - vista superior del robot con tres conos de ultrasonido etiquetados `izquierdo`, `central`, `derecho`
@@ -180,12 +175,7 @@ en español, igual que en el firmware del ESP32.
 > usuario → robot → sesión → lecturas, con `lecturas` dentro de una zona sombreada etiquetada
 > "datos de serie temporal".
 >
-> Debajo, separadas por una línea discontinua, tres cajas más pequeñas con el mismo estilo de
-> caja UML: `«view» v_lecturas_por_minuto`, `«view» v_lecturas_por_hora` y
-> `«view» v_resumen_sesion`, cada una listando 3 o 4 campos de salida, con flechas punteadas de
-> lectura hacia `lecturas` y `sesiones`.
->
-> Anotaciones solo como etiquetas cortas sobre las líneas: `ON DELETE CASCADE`.
+
 >
 > Estilo: UML vectorial plano y moderno, fondo claro, cajas con esquinas suaves y cabecera de
 > color, 3 colores de acento como máximo, tipografía sans-serif con los nombres de columna en

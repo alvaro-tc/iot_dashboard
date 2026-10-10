@@ -1,6 +1,7 @@
 // Lecturas, sesiones, configuración y estadísticas de un robot.
 //
 // Todo pasa por exigirPropiedad: un usuario solo ve sus robots, un admin los ve todos.
+import { PWM_ACTIVO } from '@iot/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../auth.ts';
@@ -164,7 +165,19 @@ datosRouter.patch('/dispositivos/:id/configuracion', async (req, res) => {
 datosRouter.get('/dispositivos/:id/resumen', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
   const { rows } = await pool.query(
-    `SELECT
+    `WITH total AS (
+       -- Acumulado de toda la vida del robot, en una sola pasada por sus lecturas. El tiempo
+       -- de cada motor por separado solo se puede contar aqui: la vista de sesion agrega el
+       -- PWM de las dos ruedas juntas.
+       -- ponytail: cuenta todas las lecturas del robot en cada peticion (cada 10 s); si la
+       -- tabla crece a millones, acumular por sesion en v_resumen_sesion.
+       SELECT count(*) FILTER (WHERE abs(movimiento_izquierda) >= $2
+                                  OR abs(movimiento_derecha)   >= $2) AS marcha,
+              count(*) FILTER (WHERE abs(movimiento_izquierda) >= $2) AS izquierda,
+              count(*) FILTER (WHERE abs(movimiento_derecha)   >= $2) AS derecha
+       FROM lecturas WHERE dispositivo_id = $1
+     )
+     SELECT
        (SELECT coalesce(sum(duracion_s), 0) FROM v_resumen_sesion
          WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "segundosHoy",
        (SELECT coalesce(sum(lecturas_en_marcha), 0) FROM v_resumen_sesion
@@ -180,8 +193,14 @@ datosRouter.get('/dispositivos/:id/resumen', async (req, res) => {
        (SELECT bateria_porcentaje FROM lecturas WHERE dispositivo_id = $1
          ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaPorcentaje",
        (SELECT bateria_voltios FROM lecturas WHERE dispositivo_id = $1
-         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaVoltios"`,
-    [req.params.id],
+         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaVoltios",
+       (SELECT coalesce(sum(duracion_s), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1)                                                 AS "segundosTotal",
+       total.marcha                                                                 AS "lecturasEnMarchaTotal",
+       total.izquierda                                                              AS "lecturasMarchaIzquierdaTotal",
+       total.derecha                                                                AS "lecturasMarchaDerechaTotal"
+     FROM total`,
+    [req.params.id, PWM_ACTIVO],
   );
 
   const sesion = sesionActiva(req.params.id);

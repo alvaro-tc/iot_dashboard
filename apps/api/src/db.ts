@@ -3,6 +3,9 @@ import { env } from './env.ts';
 
 // BIGSERIAL/count(*) llegan como texto por defecto; los ids caben de sobra en un number.
 pg.types.setTypeParser(pg.types.builtins.INT8, Number);
+// NUMERIC (distancias, voltios, avg/sum de las vistas) también llega como texto: el front
+// hace `v.toFixed(1)` sobre estos campos. Precisión de float sobra para cm y voltios.
+pg.types.setTypeParser(pg.types.builtins.NUMERIC, (v) => (v === null ? null : Number(v)));
 
 export const pool = new pg.Pool({ connectionString: env.DATABASE_URL });
 pool.on('error', (e) => console.error('[db] error en conexión inactiva:', e.message));

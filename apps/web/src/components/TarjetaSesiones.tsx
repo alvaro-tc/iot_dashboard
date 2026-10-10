@@ -6,13 +6,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api.ts';
 import { duracion, fechaHora, pct } from '../lib/formato.ts';
-import { INTERVALO_TELEMETRIA_MS } from '../lib/metricas.ts';
+import { segundosDeLecturas } from '../lib/metricas.ts';
 import { useRobots } from '../lib/robots.tsx';
 import type { ResumenSesion } from '../lib/types.ts';
 import { Badge, Esqueleto, Tarjeta, Vacio } from './ui.tsx';
 
-/** Segundos en marcha de una sesión: cada lectura con PWM vale un intervalo de telemetría. */
-const segundosEnMarcha = (s: ResumenSesion) => ((s.lecturasEnMarcha ?? 0) * INTERVALO_TELEMETRIA_MS) / 1000;
+const segundosEnMarcha = (s: ResumenSesion) => segundosDeLecturas(s.lecturasEnMarcha);
 
 export function TarjetaSesiones() {
   const { robot } = useRobots();

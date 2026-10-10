@@ -7,14 +7,11 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api.ts';
 import { Chart } from '../lib/chart.ts';
 import { cm, duracion, fechaHora, hora, pct } from '../lib/formato.ts';
-import { INTERVALO_TELEMETRIA_MS } from '../lib/metricas.ts';
+import { segundosDeLecturas as segundos } from '../lib/metricas.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 import type { ResumenSesion } from '../lib/types.ts';
 import { Esqueleto, Tarjeta, Vacio } from '../components/ui.tsx';
-
-/** Segundos de una cuenta de lecturas: cada lectura vale un intervalo de telemetría. */
-const segundos = (lecturas: number | null) => ((lecturas ?? 0) * INTERVALO_TELEMETRIA_MS) / 1000;
 
 function DonaMarcha({ s }: { s: ResumenSesion }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);

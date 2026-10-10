@@ -106,6 +106,11 @@ export interface Resumen {
   bateriaPorcentaje: number | null;
   bateriaVoltios: number | null;
   mensajesPorSegundo: number;
+  /** Acumulados de toda la vida del robot, no solo de hoy. */
+  segundosTotal: number;
+  lecturasEnMarchaTotal: number;
+  lecturasMarchaIzquierdaTotal: number;
+  lecturasMarchaDerechaTotal: number;
   sesion: {
     id: number;
     iniciadaEn: number;

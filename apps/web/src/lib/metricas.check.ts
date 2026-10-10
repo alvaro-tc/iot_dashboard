@@ -2,7 +2,7 @@
 // Comprueba el cálculo de los widgets de uso: si esto falla, los contadores y las gráficas de
 // motor mienten (y mentir con un número grande en pantalla es peor que no mostrarlo).
 import assert from 'node:assert/strict';
-import { INTERVALO_TELEMETRIA_MS, METRICAS, metrica, segundosMotores, usoAcumulado } from './metricas.ts';
+import { INTERVALO_TELEMETRIA_MS, METRICAS, metrica, segundosDeLecturas, usoAcumulado } from './metricas.ts';
 
 type Lectura = Parameters<typeof usoAcumulado>[0][number];
 
@@ -39,12 +39,10 @@ assert.equal(usoAcumulado([l(0, 180, 180), l(600_000, 180, 180)], 'izquierdo').a
 // Sin lecturas no hay serie (y la gráfica dibuja vacío, no un cero falso).
 assert.deepEqual(usoAcumulado([], 'izquierdo'), []);
 
-const resumen = (campos: Record<string, unknown>) => campos as unknown as Parameters<typeof segundosMotores>[0];
-
 // 100 lecturas en marcha a 500 ms = 50 s.
-assert.equal(segundosMotores(resumen({ lecturasEnMarchaHoy: 100 })), (100 * INTERVALO_TELEMETRIA_MS) / 1000);
+assert.equal(segundosDeLecturas(100), (100 * INTERVALO_TELEMETRIA_MS) / 1000);
 // Robot nuevo: el servidor no manda el campo y el contador muestra 0, no NaN.
-assert.equal(segundosMotores(resumen({})), 0);
+assert.equal(segundosDeLecturas(undefined), 0);
 
 // Toda métrica escribe algo sin datos de sesión, y una id desconocida cae en la primera.
 {
@@ -59,6 +57,10 @@ assert.equal(segundosMotores(resumen({})), 0);
       bateriaPorcentaje: null,
       bateriaVoltios: null,
       mensajesPorSegundo: 0,
+      segundosTotal: 0,
+      lecturasEnMarchaTotal: 0,
+      lecturasMarchaIzquierdaTotal: 0,
+      lecturasMarchaDerechaTotal: 0,
       sesion: null,
     },
     lecturas: [],
