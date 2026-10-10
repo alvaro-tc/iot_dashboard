@@ -72,11 +72,6 @@ def main():
         ) >= cfg.INTERVALO_MQTT_MS:
 
             ultima_publicacion = ahora
-
-            # Este diccionario es exactamente lo que guarda la tabla `lecturas`:
-            #   distancias_cm  -> distancia_izquierda_cm / central / derecha (None = nada en rango)
-            #   motores        -> movimiento_izquierda / movimiento_derecha (-255..255)
-            #   bateria_*      -> bateria_voltios / bateria_porcentaje
             datos = {
                 "robot_id": cfg.ROBOT_ID,
                 "distancias_cm": sensores.obtener_distancias(),
@@ -88,10 +83,7 @@ def main():
 
             mqtt.publicar_telemetria(datos)
 
-        # Reconexión MQTT espaciada para no bloquear continuamente.
         mqtt.intentar_reconectar()
-
-        # Pausa mínima para ceder tiempo al sistema.
         time.sleep_ms(1)
 
 

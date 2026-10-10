@@ -150,3 +150,57 @@ export const METRICAS = [
 export type IdMetrica = (typeof METRICAS)[number]['valor'];
 
 export const metrica = (id: IdMetrica) => METRICAS.find((m) => m.valor === id) ?? METRICAS[0];
+
+// ---------------------------------------------------------------------------
+// Actividad del motor: velocidad con signo a lo largo del tiempo
+// ---------------------------------------------------------------------------
+//
+// Tres ventanas para el mismo widget. La de "vivo" sale de la telemetría que el socket tiene
+// en memoria (una lectura cada 500 ms); las otras dos de los agregados de Postgres, que es el
+// único sitio donde hay historial más allá de esos minutos.
+
+export const ALCANCES = [
+  { valor: 'vivo', texto: 'En vivo' },
+  { valor: 'hoy', texto: 'Hoy' },
+  { valor: 'total', texto: 'Total' },
+] as const;
+export type Alcance = (typeof ALCANCES)[number]['valor'];
+export const esAlcance = (v: unknown): v is Alcance => ALCANCES.some((a) => a.valor === v);
+
+/** Agregación que pide cada ventana: por minuto cabe el día, por hora cabe la vida del robot. */
+export const AGREGACION: Record<Exclude<Alcance, 'vivo'>, 'minuto' | 'hora'> = { hoy: 'minuto', total: 'hora' };
+
+export interface Punto {
+  x: number;
+  /** PWM con signo: >0 adelante, <0 atrás, null = sin dato en ese tramo. */
+  y: number | null;
+}
+
+/** Velocidad instantánea de una rueda, tal como llegó por el socket. */
+export const velocidadEnVivo = (lecturas: Lectura[], motor: Motor): Punto[] =>
+  lecturas.map((l) => ({ x: l.creadoEn, y: pwmMotor(l, motor) }));
+
+/**
+ * Velocidad media de una rueda por tramo (minuto u hora), con su signo. Postgres devuelve los
+ * `avg` como cadena, así que se convierte aquí: sin esto la gráfica compara textos.
+ */
+export const velocidadAgregada = (filas: FilaAgregada[], motor: Motor): Punto[] =>
+  filas.map((f) => {
+    const v = motor === 'izquierdo' ? f.promMovIzquierda : f.promMovDerecha;
+    return { x: new Date(f.instante).getTime(), y: v === null || v === undefined ? null : Number(v) };
+  });
+
+/** Tiempo que esa rueda estuvo en marcha en el tramo agregado, en segundos. */
+export const segundosMarcha = (filas: FilaAgregada[], motor: Motor): number =>
+  segundosDeLecturas(
+    filas.reduce((a, f) => a + Number((motor === 'izquierdo' ? f.lecturasMarchaIzquierda : f.lecturasMarchaDerecha) ?? 0), 0),
+  );
+
+/** Lo que el widget necesita de una fila agregada; `LecturaAgregada` cumple con esto. */
+interface FilaAgregada {
+  instante: string;
+  promMovIzquierda: number | null;
+  promMovDerecha: number | null;
+  lecturasMarchaIzquierda: number;
+  lecturasMarchaDerecha: number;
+}

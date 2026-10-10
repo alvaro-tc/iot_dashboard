@@ -16,7 +16,7 @@ import {
   Ruler,
   Wifi,
 } from 'lucide-react';
-import { METRICAS, metrica, type IdMetrica } from './metricas.ts';
+import { METRICAS, esAlcance, metrica, type Alcance, type IdMetrica } from './metricas.ts';
 
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
 export const COLUMNAS = 24;
@@ -60,8 +60,8 @@ export const TARJETAS_PANEL = [
   { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 18, y: 6, w: 6, h: 4 }, min: { w: 6, h: 3 } },
   // Los de abajo no salen de fábrica (POR_DEFECTO_VISIBLES): con todos a la vez, más los
   // contadores que se añadan, no cabe nada en FILAS filas. Se añaden desde el cajón.
-  { id: 'motor-izq', texto: 'Uso motor izquierdo', Icono: Cog, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'motor-der', texto: 'Uso motor derecho', Icono: Cog, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'motor-izq', texto: 'Actividad motor izquierdo', Icono: Cog, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'motor-der', texto: 'Actividad motor derecho', Icono: Cog, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'dist-izq', texto: 'Distancia izquierda', Icono: Ruler, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'dist-centro', texto: 'Distancia central', Icono: Ruler, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'dist-der', texto: 'Distancia derecha', Icono: Ruler, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
@@ -131,6 +131,7 @@ const CLAVE = 'panel-tarjetas-v3';
 const CLAVE_CAJAS = 'panel-disposicion-v4';
 const CLAVE_RADAR = 'panel-radar-tema';
 const CLAVE_METRICAS = 'panel-contadores';
+const CLAVE_ALCANCES = 'panel-motor-alcance';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 /** Ids que se pueden restaurar de localStorage: los del catálogo y los contadores. */
 const conocido = (id: unknown): id is IdTarjeta =>
@@ -200,6 +201,16 @@ function leerMetricas(): Record<string, IdMetrica> {
   }
 }
 
+/** Ventana de los widgets de actividad del motor, por id. Lo que no esté aquí va "en vivo". */
+function leerAlcances(): Record<string, Alcance> {
+  try {
+    const crudo = JSON.parse(localStorage.getItem(CLAVE_ALCANCES) ?? '{}') as Record<string, unknown>;
+    return Object.fromEntries(Object.entries(crudo ?? {}).filter(([, a]) => esAlcance(a))) as Record<string, Alcance>;
+  } catch {
+    return {};
+  }
+}
+
 interface ValorPanel {
   visibles: IdTarjeta[];
   ve: (id: IdTarjeta) => boolean;
@@ -222,6 +233,9 @@ interface ValorPanel {
   fijarMetrica: (id: IdTarjeta, m: IdMetrica) => void;
   /** Pone un contador nuevo en el tablero y devuelve su id, para abrir su diálogo. */
   anadirContador: () => IdTarjeta;
+  /** Ventana de cada widget de motor: en vivo, hoy o total. */
+  alcances: Record<string, Alcance>;
+  fijarAlcance: (id: IdTarjeta, a: Alcance) => void;
 }
 
 const Contexto = createContext<ValorPanel>({
@@ -239,6 +253,8 @@ const Contexto = createContext<ValorPanel>({
   metricas: {},
   fijarMetrica: () => {},
   anadirContador: () => '',
+  alcances: {},
+  fijarAlcance: () => {},
 });
 export const usePanelTarjetas = () => useContext(Contexto);
 
@@ -247,6 +263,7 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(leerCajas);
   const [temaRadar, setTemaRadar] = useState<TemaRadar>(leerTemaRadar);
   const [metricas, setMetricas] = useState<Record<string, IdMetrica>>(leerMetricas);
+  const [alcances, setAlcances] = useState<Record<string, Alcance>>(leerAlcances);
 
   useEffect(() => {
     try {
@@ -254,10 +271,11 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
       localStorage.setItem(CLAVE_CAJAS, JSON.stringify(cajas));
       localStorage.setItem(CLAVE_RADAR, temaRadar);
       localStorage.setItem(CLAVE_METRICAS, JSON.stringify(metricas));
+      localStorage.setItem(CLAVE_ALCANCES, JSON.stringify(alcances));
     } catch {
       /* navegación privada: la preferencia solo dura la sesión */
     }
-  }, [visibles, cajas, temaRadar, metricas]);
+  }, [visibles, cajas, temaRadar, metricas, alcances]);
 
   const alternar = useCallback((id: IdTarjeta) => {
     setVisibles((xs) =>
@@ -287,10 +305,11 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
     setMetricas({}); // los contadores se van con ellos: no dejan su métrica huérfana detrás
   }, []);
   const fijarMetrica = useCallback((id: IdTarjeta, m: IdMetrica) => setMetricas((prev) => ({ ...prev, [id]: m })), []);
+  const fijarAlcance = useCallback((id: IdTarjeta, a: Alcance) => setAlcances((prev) => ({ ...prev, [id]: a })), []);
   const restablecerDisposicion = useCallback(() => setCajas({}), []);
 
   const fijarTamano = useCallback((id: IdTarjeta, w: number, h: number) => {
-    const min = TARJETAS_PANEL.find((t) => t.id === id)!.min;
+    const { min } = infoTarjeta(id); // también para los contadores, que no están en el catálogo
     setCajas((prev) => {
       const c = prev[id] ?? POR_DEFECTO(id);
       const ancho = Math.min(COLUMNAS, Math.max(min.w, w));
@@ -345,6 +364,8 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
         metricas,
         fijarMetrica,
         anadirContador,
+        alcances,
+        fijarAlcance,
       }}
     >
       {children}

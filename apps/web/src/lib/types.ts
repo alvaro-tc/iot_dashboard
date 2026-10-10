@@ -73,6 +73,11 @@ export interface LecturaAgregada {
   promDerechaCm: number | null;
   promPwmIzquierda: number | null;
   promPwmDerecha: number | null;
+  /** PWM medio CON signo de cada rueda: negativo = ese tramo fue marcha atrás. */
+  promMovIzquierda: number | null;
+  promMovDerecha: number | null;
+  lecturasMarchaIzquierda: number;
+  lecturasMarchaDerecha: number;
   lecturasEnMarcha: number;
   lecturasDetenido: number;
   promBateriaPorcentaje: number | null;

@@ -32,6 +32,11 @@ UPDATE configuracion_dispositivo SET velocidad_base = 210 WHERE dispositivo_id =
 
 -- Sesiones pasadas. reset.ts las rellena con lecturas simuladas:
 -- la duración de cada una sale de iniciada_en/finalizada_en.
+--
+-- Los robots de alvaro@demo.com tienen dos semanas de historial (una o dos limpiezas por día,
+-- de 12 a 40 min) para que el widget de actividad del motor tenga algo que enseñar en
+-- "Hoy" y en "Total", y que los dos números sean distintos. roomba-cocina se dio de alta
+-- hace 6 días, así que su historial empieza ahí.
 INSERT INTO sesiones (dispositivo_id, iniciada_en, finalizada_en)
 SELECT v.dispositivo_id,
        (current_date + v.dia + v.t0)::timestamptz,
@@ -40,8 +45,26 @@ FROM (VALUES
   ('roomba-sala',   0,  time '08:30', time '09:05'),
   ('roomba-sala',   0,  time '14:32', time '15:10'),
   ('roomba-sala',  -1,  time '09:15', time '09:58'),
+  ('roomba-sala',  -1,  time '19:05', time '19:22'),
   ('roomba-sala',  -2,  time '18:00', time '18:25'),
+  ('roomba-sala',  -3,  time '08:45', time '09:12'),
+  ('roomba-sala',  -4,  time '10:10', time '10:38'),
+  ('roomba-sala',  -4,  time '17:40', time '17:55'),
+  ('roomba-sala',  -5,  time '09:00', time '09:30'),
+  ('roomba-sala',  -6,  time '11:20', time '11:52'),
+  ('roomba-sala',  -7,  time '08:35', time '09:00'),
+  ('roomba-sala',  -8,  time '16:15', time '16:40'),
+  ('roomba-sala',  -9,  time '09:40', time '10:05'),
+  ('roomba-sala', -10,  time '12:05', time '12:33'),
+  ('roomba-sala', -11,  time '08:50', time '09:18'),
+  ('roomba-sala', -12,  time '18:20', time '18:44'),
+  ('roomba-sala', -13,  time '10:30', time '10:52'),
   ('roomba-cocina', 0,  time '11:00', time '11:18'),
+  ('roomba-cocina', 0,  time '06:45', time '06:59'),
   ('roomba-cocina',-1,  time '12:40', time '13:02'),
+  ('roomba-cocina',-2,  time '13:15', time '13:30'),
+  ('roomba-cocina',-3,  time '12:50', time '13:08'),
+  ('roomba-cocina',-4,  time '11:35', time '11:47'),
+  ('roomba-cocina',-5,  time '13:00', time '13:20'),
   ('roomba-maria', -1,  time '16:20', time '16:47')
 ) AS v(dispositivo_id, dia, t0, t1);

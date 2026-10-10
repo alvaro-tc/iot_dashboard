@@ -116,6 +116,12 @@ SELECT
   avg(l.distancia_derecha_cm)                             AS prom_derecha_cm,
   avg(abs(l.movimiento_izquierda))                        AS prom_pwm_izquierda,
   avg(abs(l.movimiento_derecha))                          AS prom_pwm_derecha,
+  -- Con signo: positivo adelante, negativo atrás. El promedio de |PWM| de arriba dice
+  -- cuánto corre la rueda; este dice hacia dónde, que es lo que pinta el widget de motor.
+  avg(l.movimiento_izquierda)                             AS prom_mov_izquierda,
+  avg(l.movimiento_derecha)                               AS prom_mov_derecha,
+  count(*) FILTER (WHERE abs(l.movimiento_izquierda) >= 10) AS lecturas_marcha_izquierda,
+  count(*) FILTER (WHERE abs(l.movimiento_derecha)   >= 10) AS lecturas_marcha_derecha,
   count(*) FILTER (WHERE abs(l.movimiento_izquierda) >= 10
                       OR abs(l.movimiento_derecha)   >= 10) AS lecturas_en_marcha,
   count(*) FILTER (WHERE abs(l.movimiento_izquierda) <  10
@@ -137,6 +143,12 @@ SELECT
   avg(l.distancia_derecha_cm)                             AS prom_derecha_cm,
   avg(abs(l.movimiento_izquierda))                        AS prom_pwm_izquierda,
   avg(abs(l.movimiento_derecha))                          AS prom_pwm_derecha,
+  -- Con signo: positivo adelante, negativo atrás. El promedio de |PWM| de arriba dice
+  -- cuánto corre la rueda; este dice hacia dónde, que es lo que pinta el widget de motor.
+  avg(l.movimiento_izquierda)                             AS prom_mov_izquierda,
+  avg(l.movimiento_derecha)                               AS prom_mov_derecha,
+  count(*) FILTER (WHERE abs(l.movimiento_izquierda) >= 10) AS lecturas_marcha_izquierda,
+  count(*) FILTER (WHERE abs(l.movimiento_derecha)   >= 10) AS lecturas_marcha_derecha,
   count(*) FILTER (WHERE abs(l.movimiento_izquierda) >= 10
                       OR abs(l.movimiento_derecha)   >= 10) AS lecturas_en_marcha,
   count(*) FILTER (WHERE abs(l.movimiento_izquierda) <  10

@@ -48,7 +48,7 @@ import {
   type IdTarjeta,
 } from '../lib/panel.tsx';
 import { useRobots } from '../lib/robots.tsx';
-import { METRICAS, metrica, type IdMetrica } from '../lib/metricas.ts';
+import { ALCANCES, METRICAS, metrica, type IdMetrica } from '../lib/metricas.ts';
 import { useSocket } from '../lib/socket.tsx';
 import { DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
 import { TarjetaBateria } from '../components/TarjetaBateria.tsx';
@@ -56,7 +56,7 @@ import { TarjetaConectividad } from '../components/TarjetaConectividad.tsx';
 import { TarjetaContador, useResumen } from '../components/TarjetaContador.tsx';
 import { TarjetaDistancias } from '../components/TarjetaDistancias.tsx';
 import { TarjetaEstado } from '../components/TarjetaEstado.tsx';
-import { TarjetaMotor } from '../components/TarjetaMotor.tsx';
+import { TarjetaActividadMotor } from '../components/TarjetaActividadMotor.tsx';
 import { TarjetaRadar } from '../components/TarjetaRadar.tsx';
 import { TarjetaSesiones } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
@@ -220,7 +220,8 @@ function CajonWidgets({ vista, onEditar }: { vista?: (id: IdTarjeta) => ReactNod
 
 /** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
 function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
-  const { layout, fijarTamano, temaRadar, fijarTemaRadar, metricas, fijarMetrica } = usePanelTarjetas();
+  const { layout, fijarTamano, temaRadar, fijarTemaRadar, metricas, fijarMetrica, alcances, fijarAlcance } =
+    usePanelTarjetas();
   const { min } = infoTarjeta(id);
   // El contador se llama por lo que cuenta: es su título en el tablero.
   const texto = esContador(id) ? metrica(metricas[id]).texto : infoTarjeta(id).texto;
@@ -280,6 +281,27 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
           </div>
         )}
 
+        {/* Opción propia de los widgets de motor: qué ventana de tiempo dibujan. Es lo que
+            distingue "lo que está haciendo ahora" de "cuánto ha trabajado hoy o en total". */}
+        {(id === 'motor-izq' || id === 'motor-der') && (
+          <div>
+            <span className="etiqueta">Tiempo de uso</span>
+            <Segmentado
+              etiqueta="Ventana del widget de motor"
+              valor={alcances[id] ?? 'vivo'}
+              onCambiar={(v) => fijarAlcance(id, v)}
+              opciones={ALCANCES.map((o) => ({ valor: o.valor, texto: o.texto }))}
+            />
+            <p className="mt-1.5 text-[12px] text-tinta-suave">
+              {(alcances[id] ?? 'vivo') === 'vivo'
+                ? 'Velocidad instantánea de la rueda, con los últimos minutos de telemetría.'
+                : (alcances[id] ?? 'vivo') === 'hoy'
+                  ? 'Velocidad media por minuto de hoy, y el tiempo en marcha del día.'
+                  : 'Velocidad media por hora de todo el historial, y el tiempo en marcha total.'}
+            </p>
+          </div>
+        )}
+
         {/* Opción propia del radar: con qué criterio se colorean los tres sensores. */}
         {id === 'radar' && (
           <div>
@@ -309,7 +331,7 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
 
 export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
-  const { layout, guardarLayout, alternar } = usePanelTarjetas();
+  const { layout, guardarLayout, alternar, alcances } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
   const marcoRef = useRef<HTMLDivElement>(null);
   const filaRef = useRef<HTMLDivElement>(null);
@@ -394,9 +416,9 @@ export function Panel() {
       case 'bateria':
         return <TarjetaBateria />;
       case 'motor-izq':
-        return <TarjetaMotor motor="izquierdo" />;
+        return <TarjetaActividadMotor motor="izquierdo" alcance={alcances[id] ?? 'vivo'} />;
       case 'motor-der':
-        return <TarjetaMotor motor="derecho" />;
+        return <TarjetaActividadMotor motor="derecho" alcance={alcances[id] ?? 'vivo'} />;
       case 'dist-izq':
         return <TarjetaDistancias solo="izquierdo" />;
       case 'dist-centro':

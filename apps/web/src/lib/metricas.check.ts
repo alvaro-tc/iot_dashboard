@@ -2,7 +2,16 @@
 // Comprueba el cálculo de los widgets de uso: si esto falla, los contadores y las gráficas de
 // motor mienten (y mentir con un número grande en pantalla es peor que no mostrarlo).
 import assert from 'node:assert/strict';
-import { INTERVALO_TELEMETRIA_MS, METRICAS, metrica, segundosDeLecturas, usoAcumulado } from './metricas.ts';
+import {
+  INTERVALO_TELEMETRIA_MS,
+  METRICAS,
+  metrica,
+  segundosDeLecturas,
+  segundosMarcha,
+  usoAcumulado,
+  velocidadAgregada,
+  velocidadEnVivo,
+} from './metricas.ts';
 
 type Lectura = Parameters<typeof usoAcumulado>[0][number];
 
@@ -68,6 +77,31 @@ assert.equal(segundosDeLecturas(undefined), 0);
   } as Parameters<(typeof METRICAS)[number]['calc']>[0];
   for (const m of METRICAS) assert.ok(m.calc(ctx).length > 0, m.valor);
   assert.equal(metrica('loquesea' as never).valor, METRICAS[0].valor);
+}
+
+// Actividad del motor: la velocidad conserva el signo (adelante/atrás), que es lo que el
+// widget dibuja a un lado y a otro del cero.
+assert.deepEqual(velocidadEnVivo([l(0, 180, -120), l(500, 0, 0)], 'izquierdo'), [
+  { x: 0, y: 180 },
+  { x: 500, y: 0 },
+]);
+assert.deepEqual(velocidadEnVivo([l(0, 180, -120)], 'derecho'), [{ x: 0, y: -120 }]);
+
+// Agregados de Postgres: los `avg` llegan como cadena y un tramo sin dato queda como hueco.
+{
+  const filas = [
+    { instante: '2026-10-10T08:00:00.000Z', promMovIzquierda: '150' as never, promMovDerecha: '-90' as never, lecturasMarchaIzquierda: 100, lecturasMarchaDerecha: 40 },
+    { instante: '2026-10-10T09:00:00.000Z', promMovIzquierda: null, promMovDerecha: null, lecturasMarchaIzquierda: 20, lecturasMarchaDerecha: 0 },
+  ];
+  assert.deepEqual(velocidadAgregada(filas, 'izquierdo'), [
+    { x: Date.parse('2026-10-10T08:00:00.000Z'), y: 150 },
+    { x: Date.parse('2026-10-10T09:00:00.000Z'), y: null },
+  ]);
+  assert.equal(velocidadAgregada(filas, 'derecho')[0].y, -90);
+  // 120 lecturas de la rueda izquierda a 500 ms = 60 s; la derecha va por su cuenta.
+  assert.equal(segundosMarcha(filas, 'izquierdo'), 60);
+  assert.equal(segundosMarcha(filas, 'derecho'), 20);
+  assert.equal(segundosMarcha([], 'izquierdo'), 0);
 }
 
 console.log('metricas.check.ts ok');
