@@ -7,15 +7,14 @@
 // Salas: una por robot, `robot:{id}`. Así la telemetría de un robot no viaja a navegadores
 // que están mirando otro, que es lo que pasaba con el broadcast filtrado por rol anterior.
 //
-//   Cliente -> servidor: unirse, salir, comando, actualizar_config, sincronizar_reloj
-//   Servidor -> cliente: telemetria, evento, estado, config, comando_ack
+//   Cliente -> servidor: unirse, salir, actualizar_config, sincronizar_reloj
+//   Servidor -> cliente: telemetria, estado, config
 import type { Server as HttpServer } from 'node:http';
-import type { EventoRobot, Lectura } from '@iot/shared';
+import type { Lectura } from '@iot/shared';
 import { Server, type Socket } from 'socket.io';
 import { userFromToken, type AuthUser } from './auth.ts';
 import { actualizarConfiguracion, configSchema, configuracionDe } from './configuracion.ts';
 import { pool } from './db.ts';
-import { enviarComando } from './comandos.ts';
 import { historialDe } from './telemetria.ts';
 
 const sala = (dispositivoId: string) => `robot:${dispositivoId}`;
@@ -29,18 +28,18 @@ interface DatosSocket {
 
 /** Comprueba que el robot existe y que el usuario puede verlo. */
 async function puedeVer(user: AuthUser, dispositivoId: string): Promise<boolean> {
-  const { rows } = await pool.query<{ user_id: number }>('SELECT user_id FROM dispositivos WHERE id = $1', [
+  const { rows } = await pool.query<{ usuario_id: number }>('SELECT usuario_id FROM dispositivos WHERE id = $1', [
     dispositivoId,
   ]);
   if (!rows[0]) return false;
-  return user.role === 'admin' || rows[0].user_id === user.id;
+  return user.role === 'admin' || rows[0].usuario_id === user.id;
 }
 
 export function attachWebSocket(server: HttpServer): Server {
   io = new Server(server, {
     path: '/socket.io',
     cors: { origin: true, credentials: true },
-    // El robot publica a 5 Hz; no hace falta un ping más agresivo que esto.
+    // El robot publica unas pocas veces por segundo; no hace falta un ping más agresivo.
     pingInterval: 25_000,
     pingTimeout: 20_000,
   });
@@ -71,7 +70,7 @@ export function attachWebSocket(server: HttpServer): Server {
       }
       await socket.join(sala(dispositivoId));
 
-      // Estado inicial de golpe: así el mapa no arranca vacío esperando la siguiente lectura.
+      // Estado inicial de golpe: así el panel no arranca vacío esperando la siguiente lectura.
       const { rows } = await pool.query(
         `SELECT en_linea AS "enLinea", ultimo_contacto AS "ultimoContacto", version_firmware AS "versionFirmware"
          FROM dispositivos WHERE id = $1`,
@@ -87,24 +86,6 @@ export function attachWebSocket(server: HttpServer): Server {
 
     socket.on('salir', (dispositivoId: unknown) => {
       if (typeof dispositivoId === 'string') void socket.leave(sala(dispositivoId));
-    });
-
-    socket.on('comando', async (payload: unknown, ack?: (r: unknown) => void) => {
-      const p = payload as { dispositivoId?: string; accion?: string };
-      if (typeof p?.dispositivoId !== 'string' || !(await puedeVer(user, p.dispositivoId))) {
-        ack?.({ ok: false, error: 'No tienes acceso a ese robot.' });
-        return;
-      }
-      if (p.accion !== 'iniciar' && p.accion !== 'pausar' && p.accion !== 'detener') {
-        ack?.({ ok: false, error: 'Acción desconocida.' });
-        return;
-      }
-      try {
-        const r = await enviarComando(p.dispositivoId, p.accion);
-        ack?.({ ok: true, ...r });
-      } catch (e) {
-        ack?.({ ok: false, error: (e as Error).message });
-      }
     });
 
     socket.on('actualizar_config', async (payload: unknown, ack?: (r: unknown) => void) => {
@@ -135,9 +116,7 @@ const aSala = (dispositivoId: string, evento: string, payload: unknown) =>
   io?.of('/live').to(sala(dispositivoId)).emit(evento, payload);
 
 export const emitirTelemetria = (dispositivoId: string, l: Lectura) => aSala(dispositivoId, 'telemetria', l);
-export const emitirEvento = (dispositivoId: string, e: Omit<EventoRobot, 'id'>) => aSala(dispositivoId, 'evento', e);
 export const emitirConfig = (dispositivoId: string, cfg: unknown) => aSala(dispositivoId, 'config', cfg);
-export const emitirComandoAck = (dispositivoId: string, ack: unknown) => aSala(dispositivoId, 'comando_ack', ack);
 export const emitirEstado = (dispositivoId: string, estado: unknown) => aSala(dispositivoId, 'estado', estado);
 
 /** Echa a los sockets de un usuario desactivado, eliminado o con el rol cambiado. */

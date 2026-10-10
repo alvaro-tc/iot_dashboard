@@ -13,8 +13,7 @@ import {
   PanelLeft,
   LayoutDashboard,
   LogOut,
-  Map,
-  TriangleAlert,
+  Radar,
   UserRound,
   Users,
 } from 'lucide-react';
@@ -26,7 +25,7 @@ import { Modal } from './ui.tsx';
 interface Enlace {
   to: string;
   texto: string;
-  Icono: typeof Map;
+  Icono: typeof Radar;
   /** Los 5 que aparecen en la barra inferior del móvil. */
   movil?: boolean;
   end?: boolean;
@@ -34,10 +33,8 @@ interface Enlace {
 
 const ENLACES_CLIENTE: Enlace[] = [
   { to: '/', texto: 'Panel', Icono: LayoutDashboard, movil: true, end: true },
-  { to: '/mapa', texto: 'Mapa', Icono: Map, movil: true },
   { to: '/sesiones', texto: 'Sesiones', Icono: CalendarClock, movil: true },
-  { to: '/historial', texto: 'Historial', Icono: History },
-  { to: '/eventos', texto: 'Eventos', Icono: TriangleAlert, movil: true },
+  { to: '/historial', texto: 'Historial', Icono: History, movil: true },
   { to: '/robots', texto: 'Robots', Icono: Bot, movil: true },
   { to: '/perfil', texto: 'Perfil', Icono: UserRound },
 ];
@@ -46,7 +43,6 @@ const ENLACES_ADMIN: Enlace[] = [
   { to: '/admin', texto: 'Panel', Icono: LayoutDashboard, movil: true, end: true },
   { to: '/admin/usuarios', texto: 'Usuarios', Icono: Users, movil: true },
   { to: '/admin/robots', texto: 'Robots', Icono: Bot, movil: true },
-  { to: '/eventos', texto: 'Eventos', Icono: TriangleAlert, movil: true },
   { to: '/perfil', texto: 'Perfil', Icono: UserRound, movil: true },
 ];
 
@@ -178,8 +174,8 @@ function DialogoAyuda({ onCerrar }: { onCerrar: () => void }) {
             ocurre en el ESP32 y no depende de la red.
           </li>
           <li>
-            El mapa dibuja la posición estimada por <strong className="text-tinta">odometría</strong>, que acumula
-            error con el tiempo. Los puntos rojos son obstáculos proyectados desde los sensores.
+            El panel muestra lo que el robot <strong className="text-tinta">mide y hace</strong>: distancia de cada
+            sensor, PWM de cada rueda (de -255 a 255) y batería.
           </li>
           <li>
             Sin hardware a mano, arranca el simulador con <code className="text-tinta">pnpm simular</code>.

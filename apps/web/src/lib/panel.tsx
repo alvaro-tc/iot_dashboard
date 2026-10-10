@@ -10,10 +10,8 @@ import {
   BatteryCharging,
   CalendarClock,
   Cog,
-  Gauge,
   Bot,
   Hash,
-  Map,
   Radar,
   Ruler,
   Wifi,
@@ -54,15 +52,13 @@ export const MINIATURA = { ancho: 560, alto: 240, caja: 144 } as const;
  * un `min.h` de 3 son ~160 px y uno de 4 son ~215 px, que es lo que piden estas tarjetas.
  */
 export const TARJETAS_PANEL = [
-  { id: 'mapa', texto: 'Mapa en vivo', Icono: Map, caja: { x: 0, y: 0, w: 14, h: 6 }, min: { w: 8, h: 4 } },
-  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 14, y: 0, w: 10, h: 3 }, min: { w: 6, h: 2 } },
-  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 14, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
-  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 19, y: 3, w: 5, h: 3 }, min: { w: 4, h: 3 } },
-  { id: 'radar', texto: 'Radar de sensores', Icono: Radar, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
-  { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 18, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
-  // Los de abajo no salen de fábrica (POR_DEFECTO_VISIBLES): con los trece a la vez, más los
+  { id: 'radar', texto: 'Radar de sensores', Icono: Radar, caja: { x: 0, y: 0, w: 10, h: 6 }, min: { w: 5, h: 3 } },
+  { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 10, y: 0, w: 14, h: 6 }, min: { w: 5, h: 3 } },
+  { id: 'estado', texto: 'Estado del robot', Icono: Bot, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 4, h: 3 } },
+  { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'conectividad', texto: 'Conectividad', Icono: Wifi, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 4, h: 3 } },
+  { id: 'sesiones', texto: 'Sesiones', Icono: CalendarClock, caja: { x: 18, y: 6, w: 6, h: 4 }, min: { w: 6, h: 3 } },
+  // Los de abajo no salen de fábrica (POR_DEFECTO_VISIBLES): con todos a la vez, más los
   // contadores que se añadan, no cabe nada en FILAS filas. Se añaden desde el cajón.
   { id: 'motor-izq', texto: 'Uso motor izquierdo', Icono: Cog, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'motor-der', texto: 'Uso motor derecho', Icono: Cog, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
@@ -128,12 +124,11 @@ interface Caja {
   h: number;
 }
 
-// v2: el mapa y el radar son ya dos widgets distintos, así que la disposición guardada no
-// tiene sitio para el radar y la lista de visibles lo dejaría fuera para siempre. Las dos
-// claves suben de versión a la vez: se empieza de cero en vez de arrastrar una grilla a la
-// que le falta una tarjeta.
-const CLAVE = 'panel-tarjetas-v2';
-const CLAVE_CAJAS = 'panel-disposicion-v3';
+// v3: desaparecen los widgets de mapa y de evasión (la base ya no guarda pose ni eventos),
+// así que la disposición guardada apuntaba a tarjetas que no existen. Las dos claves suben de
+// versión a la vez: se empieza de cero en vez de arrastrar una grilla con huecos.
+const CLAVE = 'panel-tarjetas-v3';
+const CLAVE_CAJAS = 'panel-disposicion-v4';
 const CLAVE_RADAR = 'panel-radar-tema';
 const CLAVE_METRICAS = 'panel-contadores';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
@@ -141,12 +136,12 @@ const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 const conocido = (id: unknown): id is IdTarjeta =>
   typeof id === 'string' && (TODAS.includes(id) || esContador(id));
 /**
- * Lo que ve quien entra por primera vez: las ocho tarjetas originales. Los motores, las
- * distancias por sensor y los contadores existen en el cajón, pero juntos no caben en el
+ * Lo que ve quien entra por primera vez: las seis tarjetas del catálogo base. Los motores,
+ * las distancias por sensor y los contadores existen en el cajón, pero juntos no caben en el
  * tablero, así que cada cual añade los que quiera. Quien ya tenía preferencias guardadas no
  * nota nada: `leerVisibles` descarta los ids que no estén en su lista.
  */
-export const POR_DEFECTO_VISIBLES = TODAS.slice(0, 8);
+export const POR_DEFECTO_VISIBLES = TODAS.slice(0, 6);
 const POR_DEFECTO = (id: IdTarjeta): Caja => infoTarjeta(id).caja;
 
 /** Ignora ids desconocidos: si una tarjeta desaparece del código, la preferencia no rompe. */

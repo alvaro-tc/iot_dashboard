@@ -1,5 +1,5 @@
 // "Uso del motor": cuánto tiempo lleva en marcha cada rueda. Un widget por motor (el panel
-// monta este mismo componente con `motor="izq"` y `motor="der"`).
+// monta este mismo componente con `motor="izquierdo"` y `motor="derecho"`).
 //
 // La línea es el tiempo acumulado en marcha, así que solo sube: los tramos planos son el
 // robot parado y las cuestas, trabajo del motor. Se recalcula entera desde el historial que
@@ -29,7 +29,7 @@ export function TarjetaMotor({ motor }: { motor: Motor }) {
 
   const serie = usoAcumulado(historial(), motor);
   const total = serie.at(-1)?.y ?? 0;
-  const color = motor === 'izq' ? colores.acento : '#60a5fa';
+  const color = motor === 'izquierdo' ? colores.acento : '#60a5fa';
 
   useEffect(() => {
     const canvas = canvasRef.current;

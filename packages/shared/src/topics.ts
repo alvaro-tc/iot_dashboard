@@ -1,17 +1,17 @@
 // Tópicos MQTT del robot. Prefijo: roomba/{dispositivoId}/...
 //
 // El dispositivoId es el mismo id que la fila de `dispositivos` y el usuario MQTT del robot,
-// así la ACL de Mosquitto puede atarse a un único prefijo por robot.
+// así la ACL de Mosquitto puede atarse a un único prefijo por robot. Los mismos tópicos
+// están en firmware/configuracion.py.
 
 export const PREFIJO = 'roomba';
 
 /** El backend se suscribe a todo lo que sube de los robots con un solo patrón. */
 export const SUSCRIPCION_ROBOTS = `${PREFIJO}/+/+`;
-/** `telemetria/lote` y `cmd/ack` tienen dos niveles tras el id. */
-export const SUSCRIPCION_ROBOTS_SUB = `${PREFIJO}/+/+/+`;
 
-export type TopicoSubida = 'telemetria' | 'telemetria/lote' | 'estado' | 'evento' | 'cmd/ack';
-export type TopicoBajada = 'cmd' | 'config';
+/** Lo que sube el robot y lo único que baja: su configuración, publicada retenida. */
+export type TopicoSubida = 'telemetria' | 'estado';
+export type TopicoBajada = 'config';
 
 export const topico = (dispositivoId: string, t: TopicoSubida | TopicoBajada) =>
   `${PREFIJO}/${dispositivoId}/${t}`;

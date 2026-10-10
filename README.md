@@ -2,27 +2,29 @@
 
 Robot aspirador doméstico con **ESP32 + MicroPython**: tres sensores ultrasónicos HC-SR04,
 tracción diferencial con dos motorreductores, lectura de batería por ADC y un LED de estado.
-El dashboard muestra **dónde está el robot y qué está esquivando, en tiempo real**.
+El dashboard muestra **qué está midiendo y qué están haciendo sus motores, en tiempo real**.
 
 En esta etapa el foco es el **movimiento y la evasión de obstáculos**, no la succión.
 
 ```
 ESP32 ──MQTT (TLS 8883)──► Mosquitto ──1883 local──► API (Express)
   ▲                                                     │
-  │ cmd y config                                        ├─ Socket.IO (/live) ─► Dashboard React
+  │ config retenida                                     ├─ Socket.IO (/live) ─► Dashboard React
   └─────────────────────────────────────────────────────┤
                                                         └─ lotes cada 1 s ──► PostgreSQL
 ```
 
 ## Qué tiene de particular
 
-- **El robot decide solo.** La evasión corre en el ESP32. Si se cae el WiFi, sigue
-  esquivando muebles; solo deja de publicar, y guarda hasta 100 lecturas para reenviarlas.
+- **El robot decide solo.** La evasión corre en el ESP32, y las órdenes manuales le llegan
+  por ESP-NOW desde su mando. Si se cae el WiFi sigue esquivando muebles: solo deja de
+  publicar. El dashboard es de **solo lectura**.
 - **El camino en vivo no espera a la base de datos.** Cada lectura se emite por WebSocket
-  *antes* de tocar Postgres. Objetivo: menos de 300 ms desde la medición hasta que el robot
-  se mueve en el mapa del navegador. El dashboard la mide y la enseña.
-- **El mapa se construye solo.** Cada distancia medida se proyecta desde la pose del robot a
-  un punto del plano. Con los minutos, esos puntos dibujan las paredes y los muebles.
+  *antes* de tocar Postgres, y a Postgres va en lotes de un segundo.
+- **La base de datos es el JSON del robot.** Lo que publica `firmware/main.py` —distancia de
+  cada sensor, PWM con signo de cada rueda y batería— se guarda sin traducir ni derivar nada:
+  mismos nombres, misma escala de 0 a 255. El estado de movimiento no se guarda, se deduce de
+  las dos ruedas. Campo por campo en [`docs/diseno/bd.md`](docs/diseno/bd.md).
 
 ## Arranque rápido (local)
 
@@ -92,11 +94,11 @@ docs/            Circuito, diagrama ER, API, tópicos MQTT y despliegue
 | # | Requisito | Dónde |
 |---|---|---|
 | 1 | **Circuito del nodo** con mínimo 3 sensores | [`docs/circuito.md`](docs/circuito.md) · [`firmware/sensores.py`](firmware/sensores.py) · tabla de pines en [`firmware/config.example.py`](firmware/config.example.py) |
-| 2 | **Base de datos PostgreSQL** con diagrama ER | [`apps/api/db/schema.sql`](apps/api/db/schema.sql) · [`docs/diagrama_er.md`](docs/diagrama_er.md) |
+| 2 | **Base de datos PostgreSQL** con diagrama ER | [`apps/api/db/schema.sql`](apps/api/db/schema.sql) · diagrama en [`docs/diseno/uml-bd.md`](docs/diseno/uml-bd.md) · campo por campo en [`docs/diseno/bd.md`](docs/diseno/bd.md) |
 | 3 | **Inserción y lectura vía API REST** | Inserción: `POST /api/ingesta` ([`routes/ingesta.ts`](apps/api/src/routes/ingesta.ts)) y la persistencia por lotes ([`persistencia.ts`](apps/api/src/persistencia.ts)). Lectura: `GET /api/dispositivos/:id/lecturas` y familia ([`routes/datos.ts`](apps/api/src/routes/datos.ts)). Ejemplos `curl` en [`docs/api.md`](docs/api.md) |
-| 4 | **Script MicroPython** que lee los sensores y envía los datos | [`firmware/`](firmware/) — `main.py` publica por MQTT; con `MODO_ENVIO = "rest"` envía lotes por HTTP. Justificación de MQTT: [abajo](#por-qué-mqtt-y-no-rest-a-secas) |
+| 4 | **Script MicroPython** que lee los sensores y envía los datos | [`firmware/`](firmware/) — `main.py` publica por MQTT; `POST /api/ingesta` acepta lotes por HTTP como alternativa. Justificación de MQTT: [abajo](#por-qué-mqtt-y-no-rest-a-secas) |
 | 5 | **Registro y autenticación** | [`routes/auth.ts`](apps/api/src/routes/auth.ts) (bcrypt + JWT), guard HTTP y del WebSocket en [`auth.ts`](apps/api/src/auth.ts) y [`ws.ts`](apps/api/src/ws.ts). Pantallas: [`Login.tsx`](apps/web/src/pages/Login.tsx) y [`Registro.tsx`](apps/web/src/pages/Registro.tsx) |
-| 6 | **Dashboard React en tiempo real con Chart.js** | [`apps/web/`](apps/web/) — mapa y radar ([`MapaVivo.tsx`](apps/web/src/components/MapaVivo.tsx), [`RadarSensores.tsx`](apps/web/src/components/RadarSensores.tsx)), series, dona, barras, gauge y heatmap |
+| 6 | **Dashboard React en tiempo real con Chart.js** | [`apps/web/`](apps/web/) — radar de sensores ([`RadarSensores.tsx`](apps/web/src/components/RadarSensores.tsx)), series de distancia, dona, barras, gauge de batería y heatmap |
 
 ## Por qué MQTT y no REST a secas
 
@@ -104,61 +106,49 @@ Los cuatro motivos, en orden de peso:
 
 1. **Latencia.** Una conexión MQTT persistente evita abrir TCP + TLS en cada envío. A 5 Hz,
    el coste de establecer una conexión HTTP por lectura superaría al del dato.
-2. **Comandos instantáneos.** Con REST, el robot tendría que *preguntar* cada pocos segundos
-   si hay órdenes nuevas. Con MQTT está suscrito: un «detener» desde el dashboard llega en
-   milisegundos y sin tráfico de sondeo cuando no pasa nada.
+2. **Configuración sin sondeo.** Con REST, el robot tendría que *preguntar* cada pocos
+   segundos si su configuración cambió. Con MQTT está suscrito a `config`: el cambio le llega
+   en milisegundos y sin tráfico cuando no pasa nada.
 3. **Detección de desconexión gratis.** El **Last Will** hace que Mosquitto publique
    `{"en_linea": false}` por el robot si este desaparece. Con REST habría que esperar a que
    venza un timeout para *deducir* lo mismo.
 4. **Configuración retenida.** Un robot que arranca recibe su configuración en cuanto se
    suscribe, sin pedirla, y un dashboard que se abre ve el estado actual sin esperar.
 
-Aun así, el firmware trae `MODO_ENVIO = "rest"`: envía lotes cada segundo contra
-`POST /api/ingesta`. Pierde los comandos y la detección de caídas, pero sirve si en alguna
-red no se puede usar MQTT.
+Aun así, la API mantiene `POST /api/ingesta`, que acepta lotes de lecturas por HTTP con el
+token del robot. Pierde la configuración retenida y la detección de caídas, pero sirve si en
+alguna red no se puede usar MQTT.
 
-## La posición del robot: odometría y su error
+## Qué se guarda de cada lectura
 
-El robot no tiene GPS ni encoders. Calcula su posición por **dead reckoning**: integra las
-ecuaciones de tracción diferencial a partir del PWM que le está dando a cada rueda.
+El robot no tiene GPS ni encoders, así que **no hay posición**: no se puede calcular a bordo
+nada que no sea "lo que se les pidió a las ruedas", y eso acumula metros de error en minutos.
+En lugar de guardar una posición inventada, la tabla `lecturas` guarda solo lo medido:
 
-```
-v = (v_der + v_izq) / 2
-ω = (v_der − v_izq) / distancia_entre_ruedas
-θ += ω·dt     x += v·cos(θ)·dt     y += v·sin(θ)·dt
-```
+| Columna | De dónde sale |
+|---|---|
+| `distancia_izquierda_cm` · `distancia_central_cm` · `distancia_derecha_cm` | Eco de cada HC-SR04. `NULL` = no volvió: nada dentro del alcance. |
+| `movimiento_izquierda` · `movimiento_derecha` | PWM con signo de cada rueda, de −255 a 255 (negativo retrocede). Es el mismo valor que aplica el driver TB6612FNG. |
+| `bateria_voltios` · `bateria_porcentaje` | ADC con divisor resistivo; el porcentaje lo calcula el propio robot. |
+| `creado_en` | Hora del servidor al recibirla. |
 
-**Esto acumula error**, y conviene decirlo claro: no se mide lo que las ruedas giran de
-verdad, sino lo que se les pidió. Una rueda que patina, una alfombra, una pila a media carga
-o una calibración un 5 % corta se traducen en metros de desvío tras unos minutos. El error
-angular es el que más estropea el mapa: un grado de desvío se convierte en 17 cm de error
-tras un metro de avance.
-
-Por eso el dashboard avisa bajo el mapa, y por eso **pasar a «detenido» y volver a
-«iniciar» reinicia el origen** de la sesión.
+Avanzar, retroceder o girar **se deduce de las dos ruedas** (`movimiento()` en
+`@iot/shared`), así que la etiqueta nunca puede contradecir a los motores. El detalle está en
+[`docs/diseno/bd.md`](docs/diseno/bd.md).
 
 ### Calibración
 
-Dos números deciden si el mapa se parece a la realidad. Mídelos con
-[`firmware/calibrar.py`](firmware/calibrar.py):
+La batería es el único valor que hay que ajustar al hardware real, en
+[`firmware/configuracion.py`](firmware/configuracion.py):
 
 ```python
-import calibrar
-calibrar.avance()   # avanza 5 s al 100 %; mide los cm recorridos
-                    # VEL_MAX_CM_S = cm_medidos / 5
-calibrar.giro()     # gira 2 s al 100 %; mide los grados
-                    # DISTANCIA_RUEDAS_CM = (2 · VEL_MAX_CM_S · 2 · 57.2958) / grados
-calibrar.recto()    # ¿se desvía? ajusta FACTOR_IZQ / FACTOR_DER en pasos de 0.02
-calibrar.bateria()  # compara con un multímetro y ajusta BAT_FACTOR_CORRECCION
+FACTOR_DIVISOR = 2.0          # el real de tu divisor resistivo
+VOLTAJE_MIN_BATERIA = 6.0     # pack vacío
+VOLTAJE_MAX_BATERIA = 8.4     # pack lleno
 ```
 
-### Preparado para encoders y giroscopio
-
-[`firmware/odometria.py`](firmware/odometria.py) expone una sola entrada,
-`actualizar(vel_izq_pct, vel_der_pct, dt)`. Sustituir la clase por una que lea pulsos de
-encoder o el ángulo de un MPU6050 no obliga a tocar nada más: ni `main.py`, ni el protocolo,
-ni el servidor, ni el dashboard. Los pines ya están reservados en `config.py`
-(GPIO 16/17 para encoders, 21/22 para I2C).
+Compara el `bateria_v` que publica el robot con un multímetro y corrige `FACTOR_DIVISOR`
+hasta que coincidan.
 
 ## Firmware
 
@@ -184,15 +174,15 @@ su hash bcrypt y en Mosquitto su hash PBKDF2.
 ## Comprobaciones
 
 ```bash
-pnpm lint                              # tipos de las tres apps + autocomprobante de shared
-pnpm build                             # compila API y dashboard
-node packages/shared/src/robot.check.ts # geometría, ángulos, umbrales y simulación
-python firmware/movimiento.py          # máquina de estados de evasión (sin hardware)
+pnpm lint                               # tipos de las tres apps + autocomprobantes
+pnpm build                              # compila API y dashboard
+node packages/shared/src/robot.check.ts # umbrales, batería, movimiento y simulación
+node apps/web/src/lib/metricas.check.ts # lo que cuentan los widgets de uso
 ```
 
-Los dos autocomprobantes cubren lo que de verdad puede romperse en silencio: que la fórmula
-de proyección de obstáculos del cliente coincida con la de SQL, y que el robot no se quede
-bamboleándose contra una esquina en vez de esquivarla.
+Los dos autocomprobantes cubren lo que puede romperse en silencio: que avanzar, girar y estar
+detenido se lean bien del PWM de las dos ruedas, y que los contadores de tiempo de motor no
+inflen el número cuando hay un corte de conexión.
 
 ## Despliegue
 

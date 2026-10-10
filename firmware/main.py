@@ -73,8 +73,12 @@ def main():
 
             ultima_publicacion = ahora
 
+            # Este diccionario es exactamente lo que guarda la tabla `lecturas`:
+            #   distancias_cm  -> distancia_izquierda_cm / central / derecha (None = nada en rango)
+            #   motores        -> movimiento_izquierda / movimiento_derecha (-255..255)
+            #   bateria_*      -> bateria_voltios / bateria_porcentaje
             datos = {
-                "robot_id": "01",
+                "robot_id": cfg.ROBOT_ID,
                 "distancias_cm": sensores.obtener_distancias(),
                 "bateria_v": voltaje_bateria,
                 "bateria_porcentaje": porcentaje_bateria,

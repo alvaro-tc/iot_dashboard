@@ -7,7 +7,7 @@ export interface AuthUser {
   id: number;
   email: string;
   name: string;
-  role: 'admin' | 'client';
+  role: 'admin' | 'cliente';
 }
 
 declare global {
@@ -32,7 +32,7 @@ export async function userFromToken(token: string | null | undefined): Promise<A
   try {
     const payload = jwt.verify(token, env.JWT_SECRET) as jwt.JwtPayload;
     const { rows } = await pool.query<AuthUser>(
-      'SELECT id, email, name, role FROM users WHERE id = $1 AND is_active',
+      'SELECT id, correo AS email, nombre AS name, rol AS role FROM usuarios WHERE id = $1 AND activo',
       [Number(payload.sub)],
     );
     return rows[0] ?? null;

@@ -1,6 +1,6 @@
 // "Batería": equivale a la tarjeta del Bluetooth Speaker de la referencia.
-// Gauge semicircular (doughnut con circumference 180) y chip de voltaje. Es de solo vista: el
-// modo de ahorro de energía se cambia desde el control del robot (/mapa).
+// Gauge semicircular (doughnut con circumference 180) y chip de voltaje. Es de solo vista:
+// el robot manda el porcentaje y el voltaje en cada lectura.
 import { useEffect, useRef } from 'react';
 import { Chart } from '../lib/chart.ts';
 import { voltios } from '../lib/formato.ts';
@@ -55,11 +55,11 @@ export function TarjetaBateria() {
   const lectura = useUltimaLectura(1);
   const colores = useColoresTema();
 
-  const pct = lectura?.bateriaPct ?? 0;
+  const pct = lectura?.bateriaPorcentaje ?? 0;
   const color = pct < 20 ? colores.evasion : pct < 50 ? colores.precaucion : colores.libre;
 
   return (
-    <Tarjeta titulo="Batería" pie={lectura?.bateriaV != null ? <Chip>{voltios(lectura.bateriaV)}</Chip> : undefined}>
+    <Tarjeta titulo="Batería" pie={lectura?.bateriaVoltios != null ? <Chip>{voltios(lectura.bateriaVoltios)}</Chip> : undefined}>
       <div className="flex h-full min-h-0 items-center justify-center">
         {/* El semicírculo ocupa 2:1, así que la caja lo es también: el centro del dial cae en
             su borde inferior. El hueco (cutout 72%) ocupa el 72% del radio = 72% de la altura

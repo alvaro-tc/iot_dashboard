@@ -1,4 +1,4 @@
-// Lecturas, sesiones, eventos, configuración y estadísticas de un robot.
+// Lecturas, sesiones, configuración y estadísticas de un robot.
 //
 // Todo pasa por exigirPropiedad: un usuario solo ve sus robots, un admin los ve todos.
 import { Router } from 'express';
@@ -26,11 +26,29 @@ const rangoSchema = z.object({
   limite: z.coerce.number().int().min(1).max(LIMITE_FILAS).default(1000),
 });
 
-const COLUMNAS_LECTURA = `secuencia, dist_izq_cm AS "distIzqCm", dist_centro_cm AS "distCentroCm",
-  dist_der_cm AS "distDerCm", estado_movimiento AS "movimiento", pos_x_cm AS "posXCm", pos_y_cm AS "posYCm",
-  orientacion_deg AS "orientacionDeg", vel_izq_pct AS "velIzqPct", vel_der_pct AS "velDerPct",
-  bateria_v AS "bateriaV", bateria_pct AS "bateriaPct", rssi_dbm AS "rssiDbm",
-  medido_en AS "medidoEn", recibido_en AS "recibidoEn", sesion_id AS "sesionId"`;
+const COLUMNAS_LECTURA = `id,
+  distancia_izquierda_cm AS "distanciaIzquierdaCm",
+  distancia_central_cm   AS "distanciaCentralCm",
+  distancia_derecha_cm   AS "distanciaDerechaCm",
+  movimiento_izquierda   AS "movimientoIzquierda",
+  movimiento_derecha     AS "movimientoDerecha",
+  bateria_voltios        AS "bateriaVoltios",
+  bateria_porcentaje     AS "bateriaPorcentaje",
+  creado_en              AS "creadoEn",
+  sesion_id              AS "sesionId"`;
+
+const COLUMNAS_AGREGADO = `lecturas,
+  min_izquierda_cm        AS "minIzquierdaCm",
+  min_central_cm          AS "minCentralCm",
+  min_derecha_cm          AS "minDerechaCm",
+  prom_izquierda_cm       AS "promIzquierdaCm",
+  prom_central_cm         AS "promCentralCm",
+  prom_derecha_cm         AS "promDerechaCm",
+  prom_pwm_izquierda      AS "promPwmIzquierda",
+  prom_pwm_derecha        AS "promPwmDerecha",
+  lecturas_en_marcha      AS "lecturasEnMarcha",
+  lecturas_detenido       AS "lecturasDetenido",
+  prom_bateria_porcentaje AS "promBateriaPorcentaje"`;
 
 async function leerLecturas(dispositivoId: string, f: z.infer<typeof rangoSchema>) {
   const desde = f.desde ?? new Date(Date.now() - 3_600_000);
@@ -46,14 +64,15 @@ async function leerLecturas(dispositivoId: string, f: z.infer<typeof rangoSchema
     return rows.reverse(); // el LIMIT toma las más recientes; se devuelven en orden temporal
   }
 
-  const vista = f.agregacion === 'minuto' ? 'v_lecturas_por_minuto' : 'v_lecturas_por_hora';
-  const columna = f.agregacion === 'minuto' ? 'minuto' : 'hora';
+  const porMinuto = f.agregacion === 'minuto';
+  const vista = porMinuto ? 'v_lecturas_por_minuto' : 'v_lecturas_por_hora';
+  const columna = porMinuto ? 'minuto' : 'hora';
+  // Las columnas `cerca_*` solo existen en la vista por hora.
+  const cerca = porMinuto
+    ? ''
+    : `, cerca_izquierda AS "cercaIzquierda", cerca_central AS "cercaCentral", cerca_derecha AS "cercaDerecha"`;
   const { rows } = await pool.query(
-    `SELECT ${columna} AS instante, lecturas, min_izq_cm AS "minIzqCm", min_centro_cm AS "minCentroCm",
-            min_der_cm AS "minDerCm", prom_izq_cm AS "promIzqCm", prom_centro_cm AS "promCentroCm",
-            prom_der_cm AS "promDerCm", n_avanzando AS "nAvanzando", n_girando_izq AS "nGirandoIzq",
-            n_girando_der AS "nGirandoDer", n_retrocediendo AS "nRetrocediendo", n_detenido AS "nDetenido",
-            prom_bateria_pct AS "promBateriaPct", latencia_ms AS "latenciaMs"
+    `SELECT ${columna} AS instante, ${COLUMNAS_AGREGADO}${cerca}
      FROM ${vista}
      WHERE dispositivo_id = $1 AND ${columna} >= $2 AND ${columna} < $3
      ORDER BY ${columna}`,
@@ -89,13 +108,16 @@ datosRouter.get('/dispositivos/:id/sesiones', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
   const { rows } = await pool.query(
     `SELECT sesion_id AS id, iniciada_en AS "iniciadaEn", finalizada_en AS "finalizadaEn",
-            duracion_s AS "duracionS", distancia_recorrida_cm AS "distanciaCm", total_evasiones AS "evasiones",
-            total_lecturas AS "lecturas", bateria_inicio_pct AS "bateriaInicioPct",
-            bateria_fin_pct AS "bateriaFinPct", bateria_consumida_pct AS "bateriaConsumidaPct",
-            pct_perdidas AS "pctPerdidas", latencia_ms AS "latenciaMs",
-            n_avanzando AS "nAvanzando", n_girando_izq AS "nGirandoIzq", n_girando_der AS "nGirandoDer",
-            n_retrocediendo AS "nRetrocediendo", n_detenido AS "nDetenido",
-            evasiones_izq AS "evasionesIzq", evasiones_centro AS "evasionesCentro", evasiones_der AS "evasionesDer"
+            duracion_s AS "duracionS", total_lecturas AS "lecturas",
+            bateria_inicio_porcentaje AS "bateriaInicioPorcentaje",
+            bateria_fin_porcentaje AS "bateriaFinPorcentaje",
+            bateria_consumida_porcentaje AS "bateriaConsumidaPorcentaje",
+            lecturas_en_marcha AS "lecturasEnMarcha", lecturas_detenido AS "lecturasDetenido",
+            prom_pwm_izquierda AS "promPwmIzquierda", prom_pwm_derecha AS "promPwmDerecha",
+            min_izquierda_cm AS "minIzquierdaCm", min_central_cm AS "minCentralCm",
+            min_derecha_cm AS "minDerechaCm",
+            cerca_izquierda AS "cercaIzquierda", cerca_central AS "cercaCentral",
+            cerca_derecha AS "cercaDerecha"
      FROM v_resumen_sesion WHERE dispositivo_id = $1
      ORDER BY (finalizada_en IS NULL) DESC, iniciada_en DESC LIMIT 100`,
     [req.params.id],
@@ -113,67 +135,13 @@ async function sesionAccesible(sesionId: string, user: { id: number; role: strin
   return rows[0].dispositivo_id;
 }
 
-/** Trayectoria + obstáculos proyectados: lo que dibuja la repetición en el mapa. */
-datosRouter.get('/sesiones/:id/mapa', async (req, res) => {
-  await sesionAccesible(req.params.id, req.user);
-  const maxPuntos = z.coerce.number().int().min(100).max(3000).catch(3000).parse(req.query.puntos);
-  const { rows } = await pool.query('SELECT * FROM obtener_mapa_sesion($1, $2)', [Number(req.params.id), maxPuntos]);
-  res.json(rows);
-});
-
 datosRouter.get('/sesiones/:id/lecturas', async (req, res) => {
   await sesionAccesible(req.params.id, req.user);
   const { rows } = await pool.query(
-    `SELECT ${COLUMNAS_LECTURA} FROM lecturas WHERE sesion_id = $1 ORDER BY secuencia LIMIT ${LIMITE_FILAS}`,
+    `SELECT ${COLUMNAS_LECTURA} FROM lecturas WHERE sesion_id = $1 ORDER BY creado_en LIMIT ${LIMITE_FILAS}`,
     [Number(req.params.id)],
   );
   res.json(rows);
-});
-
-// ---------- Eventos ----------
-
-datosRouter.get('/dispositivos/:id/eventos', async (req, res) => {
-  await exigirPropiedad(req.params.id, req.user);
-  const f = parse(
-    z.object({
-      tipo: z.enum(['obstaculo', 'atascado', 'bateria_baja', 'conexion', 'desconexion', 'cambio_modo']).optional(),
-      sensor: z.enum(['izq', 'centro', 'der']).optional(),
-      atendido: z.enum(['true', 'false']).optional(),
-      pagina: z.coerce.number().int().min(1).default(1),
-    }),
-    req.query,
-  );
-  const porPagina = 50;
-  const where: string[] = ['dispositivo_id = $1'];
-  const params: unknown[] = [req.params.id];
-  const add = (sql: string, v: unknown) => {
-    params.push(v);
-    where.push(sql.replace('?', `$${params.length}`));
-  };
-  if (f.tipo) add('tipo = ?', f.tipo);
-  if (f.sensor) add('sensor = ?', f.sensor);
-  if (f.atendido) add('atendido = ?', f.atendido === 'true');
-
-  const { rows } = await pool.query(
-    `SELECT id, tipo, sensor, distancia_cm AS "distanciaCm", pos_x_cm AS "posXCm", pos_y_cm AS "posYCm",
-            mensaje, atendido, creado_en AS "creadoEn", sesion_id AS "sesionId",
-            count(*) OVER ()::int AS total
-     FROM eventos WHERE ${where.join(' AND ')}
-     ORDER BY creado_en DESC LIMIT ${porPagina} OFFSET ${(f.pagina - 1) * porPagina}`,
-    params,
-  );
-  res.json({ total: rows[0]?.total ?? 0, pagina: f.pagina, porPagina, items: rows });
-});
-
-datosRouter.patch('/eventos/:id/atender', async (req, res) => {
-  const id = Number(req.params.id);
-  if (!Number.isInteger(id) || id <= 0) throw new HttpError(400, 'Identificador inválido.');
-  const { rows } = await pool.query<{ dispositivo_id: string }>('SELECT dispositivo_id FROM eventos WHERE id = $1', [id]);
-  if (!rows[0]) throw new HttpError(404, 'El evento no existe.');
-  await exigirPropiedad(rows[0].dispositivo_id, req.user);
-  const atendido = z.boolean().catch(true).parse(req.body?.atendido);
-  await pool.query('UPDATE eventos SET atendido = $2 WHERE id = $1', [id, atendido]);
-  res.json({ id, atendido });
 });
 
 // ---------- Configuración ----------
@@ -186,15 +154,9 @@ datosRouter.get('/dispositivos/:id/configuracion', async (req, res) => {
 datosRouter.patch('/dispositivos/:id/configuracion', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
   const cambio = parse(configSchema, req.body);
-  try {
-    const cfg = await actualizarConfiguracion(req.params.id, cambio);
-    emitirConfig(req.params.id, cfg);
-    res.json(cfg);
-  } catch (e) {
-    const campo = (e as { campo?: string }).campo;
-    if (campo) throw new HttpError(400, 'Revisa los campos marcados.', { [campo]: (e as Error).message });
-    throw e;
-  }
+  const cfg = await actualizarConfiguracion(req.params.id, cambio);
+  emitirConfig(req.params.id, cfg);
+  res.json(cfg);
 });
 
 // ---------- Estadísticas ----------
@@ -205,29 +167,20 @@ datosRouter.get('/dispositivos/:id/resumen', async (req, res) => {
     `SELECT
        (SELECT coalesce(sum(duracion_s), 0) FROM v_resumen_sesion
          WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "segundosHoy",
-       (SELECT coalesce(sum(distancia_recorrida_cm), 0) FROM sesiones
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "distanciaHoyCm",
-       (SELECT count(*)::int FROM eventos
-         WHERE dispositivo_id = $1 AND tipo = 'obstaculo' AND sensor = 'izq'
-           AND creado_en >= date_trunc('day', now()))                                AS "evasionesIzq",
-       (SELECT count(*)::int FROM eventos
-         WHERE dispositivo_id = $1 AND tipo = 'obstaculo' AND sensor = 'centro'
-           AND creado_en >= date_trunc('day', now()))                                AS "evasionesCentro",
-       (SELECT count(*)::int FROM eventos
-         WHERE dispositivo_id = $1 AND tipo = 'obstaculo' AND sensor = 'der'
-           AND creado_en >= date_trunc('day', now()))                                AS "evasionesDer",
-       (SELECT avg(EXTRACT(EPOCH FROM (recibido_en - medido_en)) * 1000) FROM lecturas
-         WHERE dispositivo_id = $1 AND creado_en >= now() - interval '5 minutes')     AS "latenciaMs",
-       (SELECT bateria_pct FROM lecturas WHERE dispositivo_id = $1
-         ORDER BY creado_en DESC LIMIT 1)                                             AS "bateriaPct",
-       (SELECT json_build_object(
-                 'avanzando',     coalesce(sum(n_avanzando), 0),
-                 'girando_izq',   coalesce(sum(n_girando_izq), 0),
-                 'girando_der',   coalesce(sum(n_girando_der), 0),
-                 'retrocediendo', coalesce(sum(n_retrocediendo), 0),
-                 'detenido',      coalesce(sum(n_detenido), 0))
-         FROM v_resumen_sesion WHERE dispositivo_id = $1
-           AND iniciada_en >= date_trunc('day', now()))                               AS "movimientos"`,
+       (SELECT coalesce(sum(lecturas_en_marcha), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "lecturasEnMarchaHoy",
+       (SELECT coalesce(sum(lecturas_detenido), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "lecturasDetenidoHoy",
+       (SELECT coalesce(sum(cerca_izquierda), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaIzquierda",
+       (SELECT coalesce(sum(cerca_central), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaCentral",
+       (SELECT coalesce(sum(cerca_derecha), 0) FROM v_resumen_sesion
+         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaDerecha",
+       (SELECT bateria_porcentaje FROM lecturas WHERE dispositivo_id = $1
+         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaPorcentaje",
+       (SELECT bateria_voltios FROM lecturas WHERE dispositivo_id = $1
+         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaVoltios"`,
     [req.params.id],
   );
 
@@ -239,13 +192,8 @@ datosRouter.get('/dispositivos/:id/resumen', async (req, res) => {
       id: sesion.id,
       iniciadaEn: sesion.iniciadaEn,
       lecturas: sesion.totalLecturas,
-      evasiones: sesion.totalEvasiones,
-      distanciaCm: Math.round(sesion.distanciaRecorridaCm * 10) / 10,
-      // Huecos en `secuencia`: lo que se perdió por el camino desde el robot.
-      pctPerdidas:
-        sesion.maxSecuencia > 0
-          ? Math.max(0, Math.round((1 - sesion.totalLecturas / sesion.maxSecuencia) * 1000) / 10)
-          : 0,
+      bateriaInicioPorcentaje: sesion.bateriaInicioPorcentaje,
+      bateriaPorcentaje: sesion.bateriaUltimaPorcentaje,
     },
   });
 });

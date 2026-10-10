@@ -7,8 +7,8 @@ Se crean con `pnpm db:reset` (ejecuta `apps/api/db/seed.sql`). Borra y recarga l
 | Email | Contraseña | Rol | Nombre |
 |---|---|---|---|
 | `admin@demo.com` | `admin123` | admin | Administración |
-| `alvaro@demo.com` | `cliente123` | client | Álvaro Quispe |
-| `maria@demo.com` | `cliente123` | client | María Condori |
+| `alvaro@demo.com` | `cliente123` | cliente | Álvaro Quispe |
+| `maria@demo.com` | `cliente123` | cliente | María Condori |
 
 Admin extra, fuera del seed: `pnpm --filter @iot/api db:seed-admin` crea o resetea
 `admin@admin.com` / `admin1234` sin tocar el resto de los datos.

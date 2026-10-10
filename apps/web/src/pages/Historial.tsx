@@ -1,15 +1,16 @@
-// /historial — agregados desde Postgres: distancia mínima por hora y sensor, estados de
-// movimiento apilados, heatmap de evasiones (24 h × 7 días) y latencia media.
+// /historial — agregados desde Postgres: distancia mínima por hora y sensor, reparto entre
+// marcha y parada, PWM medio de cada rueda y heatmap de obstáculos (24 h × 7 días).
+//
+// Todo sale de v_lecturas_por_hora: la vista ya hace las cuentas y aquí solo se dibujan.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { BASE, api, tokenStore } from '../lib/api.ts';
 import { Chart } from '../lib/chart.ts';
-import { ms } from '../lib/formato.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 import { useToast } from '../lib/toast.tsx';
-import type { EventoFila, LecturaAgregada } from '../lib/types.ts';
+import type { LecturaAgregada } from '../lib/types.ts';
 import { Esqueleto, Segmentado, Tarjeta, Vacio } from '../components/ui.tsx';
 
 type Rango = '24h' | '7d' | '30d';
@@ -44,13 +45,6 @@ export function Historial() {
     enabled: !!robot,
   });
 
-  // El heatmap necesita los eventos, no las lecturas: una evasión es un evento.
-  const { data: eventos } = useQuery<{ items: EventoFila[] }>({
-    queryKey: ['eventos-heatmap', robot?.id, rango],
-    queryFn: () => api(`/api/dispositivos/${robot!.id}/eventos?tipo=obstaculo&pagina=1`),
-    enabled: !!robot,
-  });
-
   const datos = filas ?? [];
 
   const refDistancias = useGrafica(
@@ -59,9 +53,9 @@ export function Historial() {
       data: {
         labels: datos.map((f) => ETIQUETA_HORA(f.instante)),
         datasets: [
-          { label: 'Izquierdo', data: datos.map((f) => f.minIzqCm), backgroundColor: '#60a5fa', borderRadius: 4 },
-          { label: 'Central', data: datos.map((f) => f.minCentroCm), backgroundColor: colores.acento, borderRadius: 4 },
-          { label: 'Derecho', data: datos.map((f) => f.minDerCm), backgroundColor: '#a78bfa', borderRadius: 4 },
+          { label: 'Izquierdo', data: datos.map((f) => f.minIzquierdaCm), backgroundColor: '#60a5fa', borderRadius: 4 },
+          { label: 'Central', data: datos.map((f) => f.minCentralCm), backgroundColor: colores.acento, borderRadius: 4 },
+          { label: 'Derecho', data: datos.map((f) => f.minDerechaCm), backgroundColor: '#a78bfa', borderRadius: 4 },
         ],
       },
       options: {
@@ -91,11 +85,8 @@ export function Historial() {
       data: {
         labels: datos.map((f) => ETIQUETA_HORA(f.instante)),
         datasets: [
-          { label: 'Avanzando', data: datos.map((f) => f.nAvanzando), backgroundColor: colores.libre },
-          { label: 'Girando izq.', data: datos.map((f) => f.nGirandoIzq), backgroundColor: colores.precaucion },
-          { label: 'Girando der.', data: datos.map((f) => f.nGirandoDer), backgroundColor: '#fbbf24' },
-          { label: 'Retrocediendo', data: datos.map((f) => f.nRetrocediendo), backgroundColor: colores.evasion },
-          { label: 'Detenido', data: datos.map((f) => f.nDetenido), backgroundColor: colores.tintaSuave },
+          { label: 'En marcha', data: datos.map((f) => f.lecturasEnMarcha), backgroundColor: colores.libre },
+          { label: 'Detenido', data: datos.map((f) => f.lecturasDetenido), backgroundColor: colores.tintaSuave },
         ],
       },
       options: {
@@ -113,21 +104,27 @@ export function Historial() {
     [datos, colores.tema],
   );
 
-  const refLatencia = useGrafica(
+  const refPwm = useGrafica(
     () => ({
       type: 'line',
       data: {
         labels: datos.map((f) => ETIQUETA_HORA(f.instante)),
         datasets: [
           {
-            label: 'Latencia media',
-            data: datos.map((f) => f.latenciaMs),
+            label: 'Rueda izquierda',
+            data: datos.map((f) => f.promPwmIzquierda),
             borderColor: colores.acento,
-            backgroundColor: 'rgba(249,115,22,0.12)',
             borderWidth: 2,
             pointRadius: 0,
             tension: 0.3,
-            fill: true,
+          },
+          {
+            label: 'Rueda derecha',
+            data: datos.map((f) => f.promPwmDerecha),
+            borderColor: '#60a5fa',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.3,
           },
         ],
       },
@@ -135,29 +132,17 @@ export function Historial() {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { display: false },
-          tooltip: { callbacks: { label: (i) => `${Math.round(i.parsed.y ?? 0)} ms` } },
-          annotation: {
-            annotations: {
-              objetivo: {
-                type: 'line',
-                yMin: 300,
-                yMax: 300,
-                borderColor: colores.evasion,
-                borderWidth: 1,
-                borderDash: [4, 4],
-                label: { display: true, content: 'Objetivo 300 ms', position: 'end', font: { size: 10 } },
-              },
-            },
-          },
+          legend: { position: 'bottom', labels: { color: colores.tintaSuave, boxWidth: 10, usePointStyle: true } },
+          tooltip: { callbacks: { label: (i) => `${i.dataset.label}: ${Math.round(i.parsed.y ?? 0)} de 255` } },
         },
         scales: {
           x: { grid: { display: false }, border: { display: false }, ticks: { color: colores.tintaSuave, maxTicksLimit: 8 } },
           y: {
             beginAtZero: true,
+            suggestedMax: 255,
             grid: { color: colores.borde },
             border: { display: false },
-            ticks: { color: colores.tintaSuave, callback: (v) => `${v} ms` },
+            ticks: { color: colores.tintaSuave },
           },
         },
       },
@@ -165,16 +150,18 @@ export function Historial() {
     [datos, colores.tema],
   );
 
-  // Heatmap 24 h × 7 días: se dibuja con divs, no con Chart.js. Una matriz de celdas de
+  // Heatmap 24 h × 7 días: se dibuja con una tabla, no con Chart.js. Una matriz de celdas de
   // color no necesita escalas ni ejes, y así es accesible con title por celda.
+  // Cada celda suma las lecturas en las que algún sensor vio algo a 15 cm o menos.
   const matriz = useMemo(() => {
     const m: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
-    for (const e of eventos?.items ?? []) {
-      const d = new Date(e.creadoEn);
-      m[(d.getDay() + 6) % 7][d.getHours()]++; // lunes primero
+    for (const f of datos) {
+      const d = new Date(f.instante);
+      m[(d.getDay() + 6) % 7][d.getHours()] +=
+        (f.cercaIzquierda ?? 0) + (f.cercaCentral ?? 0) + (f.cercaDerecha ?? 0); // lunes primero
     }
     return m;
-  }, [eventos]);
+  }, [datos]);
   const maximo = Math.max(1, ...matriz.flat());
 
   const exportarCsv = async () => {
@@ -220,7 +207,7 @@ export function Historial() {
 
       {!datos.length ? (
         <Tarjeta titulo="Historial">
-          <Vacio titulo="Sin datos en este rango" descripcion="Pon el robot a limpiar y vuelve a mirar." />
+          <Vacio titulo="Sin datos en este rango" descripcion="Pon el robot en marcha y vuelve a mirar." />
         </Tarjeta>
       ) : (
         <>
@@ -231,23 +218,23 @@ export function Historial() {
           </Tarjeta>
 
           <div className="grid gap-4 xl:grid-cols-2">
-            <Tarjeta titulo="Estados de movimiento por hora" subtitulo="Lecturas apiladas">
+            <Tarjeta titulo="Marcha y parada por hora" subtitulo="Lecturas apiladas">
               <div className="h-[280px]">
                 <canvas ref={(c) => void (refEstados.current = c)} />
               </div>
             </Tarjeta>
 
-            <Tarjeta titulo="Latencia media" subtitulo={`Objetivo: por debajo de ${ms(300)}`}>
+            <Tarjeta titulo="PWM medio por rueda" subtitulo="Valor absoluto, de 0 a 255">
               <div className="h-[280px]">
-                <canvas ref={(c) => void (refLatencia.current = c)} />
+                <canvas ref={(c) => void (refPwm.current = c)} />
               </div>
             </Tarjeta>
           </div>
 
-          <Tarjeta titulo="Evasiones por hora y día" subtitulo="Cuándo se encuentra más muebles">
+          <Tarjeta titulo="Obstáculos por hora y día" subtitulo="Cuándo se encuentra más muebles">
             <div className="overflow-x-auto">
               <table className="border-separate border-spacing-[2px]">
-                <caption className="sr-only">Mapa de calor de evasiones por día de la semana y hora del día</caption>
+                <caption className="sr-only">Mapa de calor de obstáculos por día de la semana y hora del día</caption>
                 <thead>
                   <tr>
                     <th />
@@ -267,7 +254,7 @@ export function Historial() {
                       {matriz[d].map((n, h) => (
                         <td
                           key={h}
-                          title={`${dia} ${h}:00 — ${n} evasiones`}
+                          title={`${dia} ${h}:00 — ${n} lecturas con obstáculo cerca`}
                           className="size-4 rounded-[3px]"
                           style={{
                             background:

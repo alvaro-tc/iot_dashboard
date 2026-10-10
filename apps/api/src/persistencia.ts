@@ -1,8 +1,8 @@
-// Buffer de persistencia: las lecturas y los eventos se acumulan en memoria y se insertan
-// en lote cada segundo (o al llegar a 200 filas).
+// Buffer de persistencia: las lecturas se acumulan en memoria y se insertan en lote cada
+// segundo (o al llegar a 200 filas).
 //
 // Por qué: el camino en vivo (MQTT -> WebSocket) ya emitió el dato antes de llegar aquí. La
-// base de datos es el camino lento, y un INSERT por lectura a 5 Hz por robot la castigaría
+// base de datos es el camino lento, y un INSERT por lectura a 2 Hz por robot la castigaría
 // sin necesidad. Si Postgres falla, se reintenta con espera exponencial y, si no se recupera,
 // las filas se vuelcan a un NDJSON local para no perderlas.
 import fs from 'node:fs/promises';
@@ -20,92 +20,43 @@ const LIMITE_MEMORIA = 5000;
 
 const PENDIENTES = path.join(ROOT, 'var', 'pendientes.ndjson');
 
-export interface EventoPersistible {
-  dispositivoId: string;
-  sesionId: number | null;
-  tipo: string;
-  sensor: string | null;
-  distanciaCm: number | null;
-  posXCm: number | null;
-  posYCm: number | null;
-  mensaje: string;
-  creadoEn: number;
-}
-
-let bufferLecturas: Lectura[] = [];
-let bufferEventos: EventoPersistible[] = [];
+let buffer: Lectura[] = [];
 let espera = ESPERA_MIN_MS;
 let volcando = false;
 let temporizador: ReturnType<typeof setInterval> | null = null;
 
-export const tamanoBuffer = () => bufferLecturas.length + bufferEventos.length;
+export const tamanoBuffer = () => buffer.length;
 
 export function encolarLectura(l: Lectura): void {
-  bufferLecturas.push(l);
-  if (bufferLecturas.length >= MAX_FILAS) void volcar();
-}
-
-export function encolarEvento(e: EventoPersistible): void {
-  bufferEventos.push(e);
+  buffer.push(l);
+  if (buffer.length >= MAX_FILAS) void volcar();
 }
 
 async function insertarLecturas(filas: Lectura[]): Promise<void> {
-  // ON CONFLICT DO NOTHING: un lote diferido reenviado tras una reconexión trae lecturas
-  // que ya se guardaron en vivo. El índice único (sesion_id, secuencia) las descarta.
   await pool.query(
-    `INSERT INTO lecturas (dispositivo_id, sesion_id, secuencia, dist_izq_cm, dist_centro_cm, dist_der_cm,
-                           estado_movimiento, pos_x_cm, pos_y_cm, orientacion_deg, vel_izq_pct, vel_der_pct,
-                           bateria_v, bateria_pct, rssi_dbm, medido_en, recibido_en)
+    `INSERT INTO lecturas (dispositivo_id, sesion_id, distancia_izquierda_cm, distancia_central_cm,
+                           distancia_derecha_cm, movimiento_izquierda, movimiento_derecha,
+                           bateria_voltios, bateria_porcentaje, creado_en)
      SELECT * FROM unnest(
-       $1::text[], $2::bigint[], $3::int[], $4::numeric[], $5::numeric[], $6::numeric[], $7::text[],
-       $8::numeric[], $9::numeric[], $10::numeric[], $11::smallint[], $12::smallint[], $13::numeric[],
-       $14::smallint[], $15::smallint[], $16::timestamptz[], $17::timestamptz[])
-     ON CONFLICT (sesion_id, secuencia) DO NOTHING`,
+       $1::text[], $2::bigint[], $3::numeric[], $4::numeric[], $5::numeric[],
+       $6::smallint[], $7::smallint[], $8::numeric[], $9::smallint[], $10::timestamptz[])`,
     [
       filas.map((f) => f.dispositivoId),
       filas.map((f) => f.sesionId),
-      filas.map((f) => f.seq),
-      filas.map((f) => f.distIzqCm),
-      filas.map((f) => f.distCentroCm),
-      filas.map((f) => f.distDerCm),
-      filas.map((f) => f.movimiento),
-      filas.map((f) => f.posXCm),
-      filas.map((f) => f.posYCm),
-      filas.map((f) => f.orientacionDeg),
-      filas.map((f) => f.velIzqPct),
-      filas.map((f) => f.velDerPct),
-      filas.map((f) => f.bateriaV),
-      filas.map((f) => f.bateriaPct),
-      filas.map((f) => f.rssiDbm),
-      filas.map((f) => new Date(f.medidoEn).toISOString()),
-      filas.map((f) => new Date(f.recibidoEn).toISOString()),
-    ],
-  );
-}
-
-async function insertarEventos(filas: EventoPersistible[]): Promise<void> {
-  await pool.query(
-    `INSERT INTO eventos (dispositivo_id, sesion_id, tipo, sensor, distancia_cm, pos_x_cm, pos_y_cm, mensaje, creado_en)
-     SELECT * FROM unnest($1::text[], $2::bigint[], $3::text[], $4::text[], $5::numeric[], $6::numeric[], $7::numeric[], $8::text[], $9::timestamptz[])`,
-    [
-      filas.map((f) => f.dispositivoId),
-      filas.map((f) => f.sesionId),
-      filas.map((f) => f.tipo),
-      filas.map((f) => f.sensor),
-      filas.map((f) => f.distanciaCm),
-      filas.map((f) => f.posXCm),
-      filas.map((f) => f.posYCm),
-      filas.map((f) => f.mensaje),
+      filas.map((f) => f.distanciaIzquierdaCm),
+      filas.map((f) => f.distanciaCentralCm),
+      filas.map((f) => f.distanciaDerechaCm),
+      filas.map((f) => f.movimientoIzquierda),
+      filas.map((f) => f.movimientoDerecha),
+      filas.map((f) => f.bateriaVoltios),
+      filas.map((f) => f.bateriaPorcentaje),
       filas.map((f) => new Date(f.creadoEn).toISOString()),
     ],
   );
 }
 
-async function aDisco(lecturas: Lectura[], eventos: EventoPersistible[]): Promise<void> {
-  const lineas = [
-    ...lecturas.map((l) => JSON.stringify({ tipo: 'lectura', dato: l })),
-    ...eventos.map((e) => JSON.stringify({ tipo: 'evento', dato: e })),
-  ];
+async function aDisco(lecturas: Lectura[]): Promise<void> {
+  const lineas = lecturas.map((l) => JSON.stringify(l));
   await fs.mkdir(path.dirname(PENDIENTES), { recursive: true });
   await fs.appendFile(PENDIENTES, lineas.join('\n') + '\n', 'utf8');
   console.warn(`[persistencia] ${lineas.length} filas volcadas a ${PENDIENTES}`);
@@ -116,30 +67,23 @@ async function aDisco(lecturas: Lectura[], eventos: EventoPersistible[]): Promis
  * tanda espera el doble (hasta 30 s). Una sola ejecución a la vez.
  */
 export async function volcar(): Promise<void> {
-  if (volcando) return;
-  if (!bufferLecturas.length && !bufferEventos.length) return;
+  if (volcando || !buffer.length) return;
   volcando = true;
 
-  const lecturas = bufferLecturas;
-  const eventos = bufferEventos;
-  bufferLecturas = [];
-  bufferEventos = [];
+  const lecturas = buffer;
+  buffer = [];
 
   try {
-    if (lecturas.length) await insertarLecturas(lecturas);
-    if (eventos.length) await insertarEventos(eventos);
+    await insertarLecturas(lecturas);
     espera = ESPERA_MIN_MS;
   } catch (e) {
     console.error(`[persistencia] fallo al insertar (${(e as Error).message}); reintento en ${espera} ms`);
     // Las filas vuelven al principio del buffer para conservar el orden temporal.
-    bufferLecturas = [...lecturas, ...bufferLecturas];
-    bufferEventos = [...eventos, ...bufferEventos];
-    if (tamanoBuffer() > LIMITE_MEMORIA) {
-      const l = bufferLecturas;
-      const ev = bufferEventos;
-      bufferLecturas = [];
-      bufferEventos = [];
-      await aDisco(l, ev).catch((err) => console.error('[persistencia] ni a disco:', err.message));
+    buffer = [...lecturas, ...buffer];
+    if (buffer.length > LIMITE_MEMORIA) {
+      const l = buffer;
+      buffer = [];
+      await aDisco(l).catch((err) => console.error('[persistencia] ni a disco:', err.message));
     }
     espera = Math.min(espera * 2, ESPERA_MAX_MS);
     setTimeout(() => void volcar(), espera).unref?.();
@@ -153,22 +97,18 @@ export async function reenviarPendientes(): Promise<void> {
   const texto = await fs.readFile(PENDIENTES, 'utf8').catch(() => '');
   if (!texto.trim()) return;
   const lecturas: Lectura[] = [];
-  const eventos: EventoPersistible[] = [];
   for (const linea of texto.split('\n')) {
     if (!linea.trim()) continue;
     try {
-      const { tipo, dato } = JSON.parse(linea);
-      if (tipo === 'lectura') lecturas.push(dato);
-      else eventos.push(dato);
+      lecturas.push(JSON.parse(linea));
     } catch {
       /* línea truncada por un corte de luz: se ignora */
     }
   }
   try {
     if (lecturas.length) await insertarLecturas(lecturas);
-    if (eventos.length) await insertarEventos(eventos);
     await fs.rm(PENDIENTES, { force: true });
-    console.log(`[persistencia] reenviadas ${lecturas.length + eventos.length} filas pendientes`);
+    console.log(`[persistencia] reenviadas ${lecturas.length} filas pendientes`);
   } catch (e) {
     console.warn(`[persistencia] no se pudieron reenviar los pendientes: ${(e as Error).message}`);
   }

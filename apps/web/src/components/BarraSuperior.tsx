@@ -2,18 +2,32 @@
 // toggle de tema y menú de usuario.
 import { useEffect, useRef, useState } from 'react';
 import { Bell, Bot, ChevronDown, Moon, Plus, Sun } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import type { EventoRobot } from '@iot/shared';
+import { useNavigate } from 'react-router-dom';
+import { DIST_EVASION_CM, SENSORES_DE } from '@iot/shared';
 import { useAuth } from '../lib/auth.tsx';
-import { NOMBRE_EVENTO, haceCuanto } from '../lib/formato.ts';
+import { haceCuanto } from '../lib/formato.ts';
 import { useRobots } from '../lib/robots.tsx';
-import { useEventosRobot } from '../lib/socket.tsx';
+import { useTelemetria } from '../lib/socket.tsx';
 import { useTema } from '../lib/tema.tsx';
 import { useToast } from '../lib/toast.tsx';
 import { DialogoNuevoRobot } from './DialogoNuevoRobot.tsx';
 
-/** Eventos que merecen un toast además de entrar en la campana. */
-const URGENTES = new Set(['atascado', 'bateria_baja', 'desconexion']);
+/**
+ * Avisos de la campana. Ya no hay tabla de eventos: se deducen aquí de la telemetría que
+ * llega por WebSocket, así que viven mientras la pestaña esté abierta.
+ *
+ * Cada aviso se da UNA vez y no vuelve hasta que la condición se despeja (histéresis): sin
+ * eso, una batería al 19 % llenaría la campana con un aviso cada medio segundo.
+ */
+const BATERIA_BAJA_PCT = 20;
+const BATERIA_OK_PCT = 30;
+
+interface Aviso {
+  titulo: string;
+  mensaje: string;
+  creadoEn: number;
+  urgente: boolean;
+}
 
 export function BarraSuperior() {
   const { user, logout } = useAuth();
@@ -24,14 +38,47 @@ export function BarraSuperior() {
 
   const [abierto, setAbierto] = useState<'usuario' | 'campana' | 'robot' | null>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
-  const [notificaciones, setNotificaciones] = useState<EventoRobot[]>([]);
+  const [notificaciones, setNotificaciones] = useState<Aviso[]>([]);
   const [sinLeer, setSinLeer] = useState(0);
   const contenedor = useRef<HTMLDivElement>(null);
+  /** Condiciones ya avisadas, para no repetir el mismo aviso en cada lectura. */
+  const avisado = useRef({ bateria: false, atascado: false });
 
-  useEventosRobot((e) => {
-    setNotificaciones((xs) => [e, ...xs].slice(0, 30));
+  const avisar = (a: Aviso) => {
+    setNotificaciones((xs) => [a, ...xs].slice(0, 30));
     setSinLeer((n) => n + 1);
-    if (URGENTES.has(e.tipo)) toast(`${NOMBRE_EVENTO[e.tipo]}: ${e.mensaje}`, 'error');
+    if (a.urgente) toast(`${a.titulo}: ${a.mensaje}`, 'error');
+  };
+
+  useTelemetria((l) => {
+    const ahora = Date.now();
+
+    if (l.bateriaPorcentaje < BATERIA_BAJA_PCT && !avisado.current.bateria) {
+      avisado.current.bateria = true;
+      avisar({
+        titulo: 'Batería baja',
+        mensaje: `El robot está al ${Math.round(l.bateriaPorcentaje)} %`,
+        creadoEn: ahora,
+        urgente: true,
+      });
+    } else if (l.bateriaPorcentaje > BATERIA_OK_PCT) {
+      avisado.current.bateria = false; // se recargó: vuelve a poder avisar
+    }
+
+    // Los tres sensores por debajo de la distancia de evasión: no tiene por dónde salir.
+    const d = SENSORES_DE(l).map((x) => x.d);
+    const rodeado = d.every((x) => x !== null && x <= DIST_EVASION_CM);
+    if (rodeado && !avisado.current.atascado) {
+      avisado.current.atascado = true;
+      avisar({
+        titulo: 'Posible atasco',
+        mensaje: 'Los tres sensores ven un obstáculo muy cerca',
+        creadoEn: ahora,
+        urgente: true,
+      });
+    } else if (!rodeado) {
+      avisado.current.atascado = false;
+    }
   });
 
   // Cierra los menús al pulsar fuera o con Escape.
@@ -98,7 +145,7 @@ export function BarraSuperior() {
                   <li className="px-4 py-6 text-center text-[13px] text-tinta-suave">Aún no tienes robots.</li>
                 )}
               </ul>
-              {user!.role === 'client' && (
+              {user!.role === 'cliente' && (
                 <button
                   type="button"
                   className="flex w-full cursor-pointer items-center gap-2 border-t border-borde px-4 py-2.5 text-left text-[14px] text-acento hover:bg-tarjeta-tenue"
@@ -137,22 +184,15 @@ export function BarraSuperior() {
                 <p className="px-4 py-6 text-center text-[13px] text-tinta-suave">Nada por ahora.</p>
               ) : (
                 <ul className="max-h-80 overflow-y-auto">
-                  {notificaciones.map((e, i) => (
-                    <li key={`${e.creadoEn}-${i}`} className="border-b border-borde px-4 py-2.5 last:border-0">
-                      <p className="text-[13px] font-medium">{NOMBRE_EVENTO[e.tipo]}</p>
-                      <p className="text-[13px] text-tinta-suave">{e.mensaje}</p>
-                      <p className="text-[12px] text-tinta-suave">{haceCuanto(e.creadoEn)}</p>
+                  {notificaciones.map((a, i) => (
+                    <li key={`${a.creadoEn}-${i}`} className="border-b border-borde px-4 py-2.5 last:border-0">
+                      <p className="text-[13px] font-medium">{a.titulo}</p>
+                      <p className="text-[13px] text-tinta-suave">{a.mensaje}</p>
+                      <p className="text-[12px] text-tinta-suave">{haceCuanto(a.creadoEn)}</p>
                     </li>
                   ))}
                 </ul>
               )}
-              <Link
-                to="/eventos"
-                className="block border-t border-borde px-4 py-2.5 text-center text-[13px] text-acento"
-                onClick={() => setAbierto(null)}
-              >
-                Ver todos los eventos
-              </Link>
             </div>
           )}
         </div>

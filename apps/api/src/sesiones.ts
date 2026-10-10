@@ -1,8 +1,9 @@
-// Sesiones de limpieza: una por ciclo de funcionamiento del robot.
+// Sesiones de funcionamiento: una por ciclo de actividad del robot.
 //
-// Se llevan en memoria mientras están vivas (distancia, evasiones, contador de lecturas) y
-// solo se escriben en Postgres al abrirlas, al cerrarlas y en un volcado periódico. Así el
-// camino en vivo no espera nunca a la base de datos.
+// Se abren con la primera lectura que llega y se cierran cuando el robot se desconecta o
+// deja de publicar (presencia.ts y el barrido de inactivas). Los contadores se llevan en
+// memoria y solo se escriben en Postgres al abrir, al cerrar y en un volcado periódico, así
+// el camino en vivo no espera nunca a la base de datos.
 import { pool } from './db.ts';
 
 export interface SesionActiva {
@@ -10,14 +11,8 @@ export interface SesionActiva {
   dispositivoId: string;
   iniciadaEn: number;
   totalLecturas: number;
-  totalEvasiones: number;
-  distanciaRecorridaCm: number;
-  bateriaInicioPct: number | null;
-  bateriaUltimaPct: number | null;
-  /** Última pose vista, para integrar la distancia recorrida entre lecturas. */
-  ultimaPose: { x: number; y: number } | null;
-  /** Mayor `secuencia` recibida: con el total de lecturas da el porcentaje de pérdidas. */
-  maxSecuencia: number;
+  bateriaInicioPorcentaje: number | null;
+  bateriaUltimaPorcentaje: number | null;
   /** Marca del último mensaje recibido, para el barrido de sesiones inactivas. */
   ultimoMensaje: number;
 }
@@ -28,24 +23,29 @@ export const sesionActiva = (dispositivoId: string) => activas.get(dispositivoId
 
 /**
  * Abre una sesión. Si la base ya tiene una abierta para ese robot (el backend se reinició
- * a media limpieza), se readopta en lugar de crear otra: el índice único
+ * a media sesión), se readopta en lugar de crear otra: el índice único
  * uniq_sesion_activa_por_dispositivo rechazaría la segunda.
  */
 export async function abrirSesion(dispositivoId: string): Promise<SesionActiva> {
   const existente = activas.get(dispositivoId);
   if (existente) return existente;
 
-  const { rows } = await pool.query<{ id: number; iniciada_en: Date; total_lecturas: number; total_evasiones: number; distancia_recorrida_cm: string; bateria_inicio_pct: number | null }>(
+  const { rows } = await pool.query<{
+    id: number;
+    iniciada_en: Date;
+    total_lecturas: number;
+    bateria_inicio_porcentaje: number | null;
+  }>(
     `INSERT INTO sesiones (dispositivo_id) VALUES ($1)
      ON CONFLICT (dispositivo_id) WHERE finalizada_en IS NULL DO NOTHING
-     RETURNING id, iniciada_en, total_lecturas, total_evasiones, distancia_recorrida_cm, bateria_inicio_pct`,
+     RETURNING id, iniciada_en, total_lecturas, bateria_inicio_porcentaje`,
     [dispositivoId],
   );
   const fila =
     rows[0] ??
     (
       await pool.query(
-        `SELECT id, iniciada_en, total_lecturas, total_evasiones, distancia_recorrida_cm, bateria_inicio_pct
+        `SELECT id, iniciada_en, total_lecturas, bateria_inicio_porcentaje
          FROM sesiones WHERE dispositivo_id = $1 AND finalizada_en IS NULL`,
         [dispositivoId],
       )
@@ -56,12 +56,8 @@ export async function abrirSesion(dispositivoId: string): Promise<SesionActiva> 
     dispositivoId,
     iniciadaEn: new Date(fila.iniciada_en).getTime(),
     totalLecturas: fila.total_lecturas ?? 0,
-    totalEvasiones: fila.total_evasiones ?? 0,
-    distanciaRecorridaCm: Number(fila.distancia_recorrida_cm ?? 0),
-    bateriaInicioPct: fila.bateria_inicio_pct,
-    bateriaUltimaPct: fila.bateria_inicio_pct,
-    ultimaPose: null,
-    maxSecuencia: 0,
+    bateriaInicioPorcentaje: fila.bateria_inicio_porcentaje,
+    bateriaUltimaPorcentaje: fila.bateria_inicio_porcentaje,
     ultimoMensaje: Date.now(),
   };
   activas.set(dispositivoId, sesion);
@@ -72,19 +68,12 @@ export async function abrirSesion(dispositivoId: string): Promise<SesionActiva> 
 async function volcar(s: SesionActiva, cerrar: boolean): Promise<void> {
   await pool.query(
     `UPDATE sesiones
-     SET total_lecturas = $2, total_evasiones = $3, distancia_recorrida_cm = $4,
-         bateria_inicio_pct = coalesce(bateria_inicio_pct, $5), bateria_fin_pct = $6,
-         finalizada_en = CASE WHEN $7 THEN now() ELSE finalizada_en END
+     SET total_lecturas = $2,
+         bateria_inicio_porcentaje = coalesce(bateria_inicio_porcentaje, $3),
+         bateria_fin_porcentaje = $4,
+         finalizada_en = CASE WHEN $5 THEN now() ELSE finalizada_en END
      WHERE id = $1`,
-    [
-      s.id,
-      s.totalLecturas,
-      s.totalEvasiones,
-      Math.round(s.distanciaRecorridaCm * 10) / 10,
-      s.bateriaInicioPct,
-      s.bateriaUltimaPct,
-      cerrar,
-    ],
+    [s.id, s.totalLecturas, s.bateriaInicioPorcentaje, s.bateriaUltimaPorcentaje, cerrar],
   );
 }
 

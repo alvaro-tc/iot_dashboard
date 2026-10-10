@@ -66,15 +66,15 @@ export function DialogoNuevoRobot({ onCerrar }: { onCerrar: () => void }) {
   };
 
   const fragmentoConfig = alta
-    ? `# firmware/config.py
-WIFI_SSID   = "TU_RED"
-WIFI_PASS   = "TU_CLAVE"
+    ? `# firmware/configuracion.py
+WIFI_SSID     = "TU_RED"
+WIFI_CLAVE    = "TU_CLAVE"
 
-ROBOT_ID    = "${alta.dispositivo.id}"
-MQTT_HOST   = "${alta.broker.host}"
-MQTT_PORT   = ${alta.broker.port}
-MQTT_USER   = "${alta.dispositivo.id}"
-MQTT_PASS   = "${alta.token}"`
+ROBOT_ID      = "${alta.dispositivo.id}"
+MQTT_SERVIDOR = "${alta.broker.host}"
+MQTT_PUERTO   = ${alta.broker.port}
+MQTT_USUARIO  = ROBOT_ID
+MQTT_CLAVE    = "${alta.token}"`
     : '';
 
   return (

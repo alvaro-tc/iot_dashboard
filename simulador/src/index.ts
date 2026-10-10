@@ -4,9 +4,9 @@
 //   pnpm simular -- --robots 3         los tres robots del seed a la vez
 //   pnpm simular -- --id roomba-cocina --token ...
 //
-// Publica en los mismos tópicos, con el mismo formato, el mismo Last Will y responde a
-// `cmd` y `config` igual que el firmware. La física la pone RobotSimulado de @iot/shared,
-// el mismo módulo con el que db:reset genera el historial.
+// Publica en los mismos tópicos, con el mismo formato y el mismo Last Will que el firmware,
+// y obedece la configuración que le llega retenida en `config`. La física la pone
+// RobotSimulado de @iot/shared, el mismo módulo con el que db:reset genera el historial.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { CONFIG_POR_DEFECTO, RobotSimulado, topico, type Configuracion } from '@iot/shared';
@@ -17,6 +17,7 @@ const RAIZ = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 cargarEnv({ path: path.join(RAIZ, '.env'), quiet: true });
 
 const PASO_MS = 50; // bucle de control, igual que el firmware
+const TELEMETRIA_MS = 500; // igual que INTERVALO_MQTT_MS en firmware/configuracion.py
 const VERSION_FIRMWARE = '1.2.0-sim';
 
 /** Robots de demo que crea `pnpm db:reset`, con sus tokens. */
@@ -45,7 +46,7 @@ function robotsAEjecutar(): Robot[] {
 
 function arrancarRobot({ id, token }: Robot): void {
   const url = process.env.MQTT_URL ?? 'mqtt://localhost:1883';
-  let config: Configuracion = { ...CONFIG_POR_DEFECTO };
+  const config: Configuracion = { ...CONFIG_POR_DEFECTO };
   // Semilla distinta por robot: tres simuladores a la vez no trazan el mismo recorrido.
   const sim = new RobotSimulado(config, { semilla: [...id].reduce((a, c) => a + c.charCodeAt(0), 0) });
 
@@ -66,25 +67,6 @@ function arrancarRobot({ id, token }: Robot): void {
 
   let bucle: ReturnType<typeof setInterval> | null = null;
   let telemetria: ReturnType<typeof setInterval> | null = null;
-  /** Lecturas guardadas mientras no hay conexión, submuestreadas a 1 por segundo. */
-  const diferidas: unknown[] = [];
-  let ultimaDiferida = 0;
-
-  const publicarTelemetria = () => {
-    const t = sim.telemetria(Date.now());
-    if (cliente.connected) {
-      cliente.publish(topico(id, 'telemetria'), JSON.stringify(t), { qos: 0 });
-    } else if (Date.now() - ultimaDiferida >= 1000) {
-      ultimaDiferida = Date.now();
-      diferidas.push(t);
-      if (diferidas.length > 100) diferidas.shift(); // igual que el firmware: tope de 100
-    }
-  };
-
-  const reprogramarTelemetria = () => {
-    if (telemetria) clearInterval(telemetria);
-    telemetria = setInterval(publicarTelemetria, config.intervaloTelemetriaMs);
-  };
 
   cliente.on('connect', () => {
     console.log(`[${id}] conectado a ${url}`);
@@ -92,45 +74,23 @@ function arrancarRobot({ id, token }: Robot): void {
       qos: 1,
       retain: true,
     });
-    cliente.subscribe([topico(id, 'cmd'), topico(id, 'config')], { qos: 1 });
-
-    if (diferidas.length) {
-      cliente.publish(topico(id, 'telemetria/lote'), JSON.stringify(diferidas), { qos: 1 });
-      console.log(`[${id}] reenviadas ${diferidas.length} lecturas diferidas`);
-      diferidas.length = 0;
-    }
+    cliente.subscribe(topico(id, 'config'), { qos: 1 });
 
     bucle ??= setInterval(() => sim.paso(PASO_MS), PASO_MS);
-    reprogramarTelemetria();
+    telemetria ??= setInterval(() => {
+      if (!cliente.connected) return; // sin conexión la lectura se descarta, como en el ESP32
+      cliente.publish(topico(id, 'telemetria'), JSON.stringify(sim.telemetria()), { qos: 0 });
+    }, TELEMETRIA_MS);
   });
 
   cliente.on('message', (topic, buf) => {
-    let json: Record<string, unknown>;
+    if (topic !== topico(id, 'config')) return;
     try {
-      json = JSON.parse(buf.toString('utf8'));
+      const json = JSON.parse(buf.toString('utf8')) as Partial<Configuracion>;
+      sim.config = { ...sim.config, ...json };
+      console.log(`[${id}] config: velocidad base ${sim.config.velocidadBase}`);
     } catch {
-      return;
-    }
-
-    if (topic === topico(id, 'config')) {
-      const anterior = config.intervaloTelemetriaMs;
-      config = { ...config, ...(json as Partial<Configuracion>) };
-      sim.config = config;
-      if (config.intervaloTelemetriaMs !== anterior) reprogramarTelemetria();
-      console.log(`[${id}] config: modo=${config.modo} evasión=${config.distanciaEvasionCm}cm`);
-      return;
-    }
-
-    if (topic === topico(id, 'cmd')) {
-      const accion = json.accion as string;
-      if (accion === 'iniciar') {
-        config.modo = 'automatico';
-        sim.reiniciar(); // nueva sesión: odometría y seq a cero
-      } else if (accion === 'pausar') config.modo = 'pausado';
-      else if (accion === 'detener') config.modo = 'detenido';
-      sim.config = config;
-      cliente.publish(topico(id, 'cmd/ack'), JSON.stringify({ id: json.id, accion }), { qos: 1 });
-      console.log(`[${id}] cmd ${accion}`);
+      /* configuración ilegible: se mantiene la anterior */
     }
   });
 
@@ -150,5 +110,4 @@ function arrancarRobot({ id, token }: Robot): void {
 
 const robots = robotsAEjecutar();
 console.log(`simulador: arrancando ${robots.length} robot(s): ${robots.map((r) => r.id).join(', ')}`);
-console.log('           el robot arranca DETENIDO; dale a iniciar desde el dashboard.');
 robots.forEach(arrancarRobot);

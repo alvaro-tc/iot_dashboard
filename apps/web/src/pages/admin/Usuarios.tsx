@@ -13,7 +13,7 @@ import { Badge, Esqueleto, Interruptor, Modal, Tarjeta } from '../../components/
 function DialogoNuevoUsuario({ onCerrar }: { onCerrar: () => void }) {
   const qc = useQueryClient();
   const toast = useToast();
-  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'client' });
+  const [form, setForm] = useState({ name: '', email: '', password: '', role: 'cliente' });
   const [errores, setErrores] = useState<Record<string, string>>({});
 
   const crear = useMutation({
@@ -62,7 +62,7 @@ function DialogoNuevoUsuario({ onCerrar }: { onCerrar: () => void }) {
           Rol
         </label>
         <select id="nu-role" className="campo cursor-pointer" value={form.role} onChange={campo('role')}>
-          <option value="client">Cliente</option>
+          <option value="cliente">Cliente</option>
           <option value="admin">Administrador</option>
         </select>
         <div className="mt-6 flex gap-2">

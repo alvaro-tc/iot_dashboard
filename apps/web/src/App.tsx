@@ -9,10 +9,8 @@ import { ProveedorRobots } from './lib/robots.tsx';
 import { ProveedorSocket } from './lib/socket.tsx';
 import { ProveedorTema } from './lib/tema.tsx';
 import { ToastProvider, useToast } from './lib/toast.tsx';
-import { Eventos } from './pages/Eventos.tsx';
 import { Historial } from './pages/Historial.tsx';
 import { Login } from './pages/Login.tsx';
-import { Mapa } from './pages/Mapa.tsx';
 import { Panel } from './pages/Panel.tsx';
 import { Perfil } from './pages/Perfil.tsx';
 import { Registro } from './pages/Registro.tsx';
@@ -52,7 +50,7 @@ function SoloInvitados({ children }: { children: ReactNode }) {
 }
 
 /** Un cliente que entra en /admin/* recibe un aviso y vuelve a su panel. */
-function ExigirRol({ rol }: { rol: 'admin' | 'client' }) {
+function ExigirRol({ rol }: { rol: 'admin' | 'cliente' }) {
   const { user } = useAuth();
   const toast = useToast();
   const permitido = user!.role === rol;
@@ -85,10 +83,8 @@ export function App() {
 
                     <Route element={<ExigirSesion><AppLayout /></ExigirSesion>}>
                       <Route index element={<Inicio />} />
-                      <Route path="mapa" element={<Mapa />} />
                       <Route path="sesiones" element={<Sesiones />} />
                       <Route path="historial" element={<Historial />} />
-                      <Route path="eventos" element={<Eventos />} />
                       <Route path="robots" element={<Robots />} />
                       <Route path="perfil" element={<Perfil />} />
 

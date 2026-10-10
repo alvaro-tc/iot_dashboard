@@ -1,20 +1,31 @@
 // Radar: lo que ven los tres sensores AHORA, sin historia ni mapa.
 //
 // El robot va abajo al centro; los anillos marcan 25, 50, 75 y 100 cm; cada sensor ocupa un
-// sector de ±18° centrado en su ángulo. El sector se parte en tres bandas cuyos límites son
-// `distanciaEvasionCm` y `distanciaPrecaucionCm`: la banda donde cae el objeto se rellena
-// con el color del estado y las de más allá quedan tenues.
+// sector de ±18° centrado en su ángulo (el de `angulosSensores`). El sector se parte en tres
+// bandas cuyos límites son DIST_EVASION_CM y DIST_PRECAUCION_CM: la banda donde cae el objeto
+// se rellena con el color del estado y las de más allá quedan tenues.
 //
-// Igual que el mapa: Chart.js pone el lienzo y el tooltip; el dibujo es un plugin propio,
-// porque un sector de corona circular no es un tipo de gráfica.
+// Chart.js pone el lienzo y el tooltip; el dibujo es un plugin propio, porque un sector de
+// corona circular no es un tipo de gráfica.
 import { useEffect, useRef } from 'react';
-import { DIST_VISTA_CM, estadoDistancia, type Configuracion, type Lectura, type Sensor } from '@iot/shared';
+import {
+  DIST_EVASION_CM,
+  DIST_PRECAUCION_CM,
+  DIST_VISTA_CM,
+  SENSORES as SENSORES_SHARED,
+  distanciaDe,
+  estadoDistancia,
+  movimiento as movimientoDe,
+  type Configuracion,
+  type Lectura,
+  type Sensor,
+} from '@iot/shared';
 import { Chart } from '../lib/chart.ts';
 import { NOMBRE_MOVIMIENTO, NOMBRE_SENSOR } from '../lib/formato.ts';
 import { usePanelTarjetas, type TemaRadar } from '../lib/panel.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 
-const SENSORES: Sensor[] = ['izq', 'centro', 'der'];
+const SENSORES: readonly Sensor[] = SENSORES_SHARED;
 const SEMIANCHO_DEG = 18;
 const ANILLOS = [25, 50, 75, 100];
 const RASTRO = 6; // últimas lecturas que dejan estela
@@ -24,7 +35,7 @@ const RASTRO = 6; // últimas lecturas que dejan estela
  * que seguir siendo tres colores distinguibles encima del recuadro oscuro (que es oscuro en
  * los dos temas). Elegidos separados también en luminosidad, para quien no distingue el tono.
  */
-export const TONO_SENSOR: Record<Sensor, string> = { izq: '#38bdf8', centro: '#c084fc', der: '#fb923c' };
+export const TONO_SENSOR: Record<Sensor, string> = { izquierdo: '#38bdf8', central: '#c084fc', derecho: '#fb923c' };
 
 /** Lo único que cambia entre paletas: cuánto rellena la banda activa, cuánto las otras, y si
     se marca el borde del sector. */
@@ -55,19 +66,15 @@ export function RadarSensores({ config, lectura }: Props) {
   coloresRef.current = colores;
   const actual = useRef<Lectura | null>(lectura);
   actual.current = lectura;
-  const rastro = useRef<Record<Sensor, number[]>>({ izq: [], centro: [], der: [] });
+  const rastro = useRef<Record<Sensor, number[]>>({ izquierdo: [], central: [], derecho: [] });
 
   // Estela: las últimas lecturas de cada sensor.
   useEffect(() => {
     if (!lectura) return;
-    const d: Record<Sensor, number | null> = {
-      izq: lectura.distIzqCm,
-      centro: lectura.distCentroCm,
-      der: lectura.distDerCm,
-    };
     for (const s of SENSORES) {
-      if (d[s] === null) continue;
-      rastro.current[s].push(d[s]!);
+      const d = distanciaDe(lectura, s);
+      if (d === null) continue;
+      rastro.current[s].push(d);
       if (rastro.current[s].length > RASTRO) rastro.current[s].shift();
     }
   }, [lectura]);
@@ -113,19 +120,19 @@ export function RadarSensores({ config, lectura }: Props) {
 
       // --- Un sector por sensor, partido en bandas ---
       for (const sensor of SENSORES) {
-        const d = l ? ({ izq: l.distIzqCm, centro: l.distCentroCm, der: l.distDerCm }[sensor] ?? null) : null;
+        const d = l ? distanciaDe(l, sensor) : null;
         const centroDeg = cfg.angulosSensores[sensor];
         const desde = aLienzo(centroDeg - SEMIANCHO_DEG);
         const hasta = aLienzo(centroDeg + SEMIANCHO_DEG);
-        const estado = estadoDistancia(d, cfg);
+        const estado = estadoDistancia(d);
 
         // En la paleta "sensor" las tres bandas van del tono del sensor: lo que se pregunta es
         // cuál de los tres ve algo, y el peligro lo sigue diciendo a qué distancia está el punto.
         const tono = TONO_SENSOR[sensor];
         const bandas: [number, number, string][] = [
-          [0, cfg.distanciaEvasionCm, porSensor ? tono : colores.evasion],
-          [cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm, porSensor ? tono : colores.precaucion],
-          [cfg.distanciaPrecaucionCm, DIST_VISTA_CM, porSensor ? tono : colores.libre],
+          [0, DIST_EVASION_CM, porSensor ? tono : colores.evasion],
+          [DIST_EVASION_CM, DIST_PRECAUCION_CM, porSensor ? tono : colores.precaucion],
+          [DIST_PRECAUCION_CM, DIST_VISTA_CM, porSensor ? tono : colores.libre],
         ];
 
         for (const [desdeCm, hastaCm, color] of bandas) {
@@ -217,12 +224,12 @@ export function RadarSensores({ config, lectura }: Props) {
       ctx.closePath();
       ctx.fill();
 
-      // Estado de movimiento sobre el robot
+      // Qué está haciendo, deducido del PWM de las dos ruedas
       if (l) {
         ctx.fillStyle = 'rgba(255,255,255,0.8)';
         ctx.font = '600 12px system-ui';
         ctx.textAlign = 'center';
-        ctx.fillText(NOMBRE_MOVIMIENTO[l.movimiento], cx, cy + 24);
+        ctx.fillText(NOMBRE_MOVIMIENTO[movimientoDe(l.movimientoIzquierda, l.movimientoDerecha)], cx, cy + 24);
       }
 
       ctx.restore();
@@ -259,7 +266,7 @@ export function RadarSensores({ config, lectura }: Props) {
 
   const resumen = lectura
     ? SENSORES.map((s) => {
-        const d = { izq: lectura.distIzqCm, centro: lectura.distCentroCm, der: lectura.distDerCm }[s];
+        const d = distanciaDe(lectura, s);
         return `sensor ${NOMBRE_SENSOR[s]}: ${d === null ? 'sin objeto' : `${d.toFixed(0)} centímetros`}`;
       }).join('; ')
     : 'sin datos';

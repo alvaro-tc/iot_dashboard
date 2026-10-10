@@ -1,24 +1,31 @@
-// "Estado del robot": equivale a la tarjeta de Temperatura de la referencia.
-// Fondo degradado según el estado, velocidad de cada rueda y LED virtual.
+// "Estado del robot": fondo degradado según lo que esté haciendo, PWM de cada rueda y LED
+// virtual. El movimiento no es un campo de la lectura: se deduce del PWM de las dos ruedas.
 import { useEffect, useState } from 'react';
-import { CONFIG_POR_DEFECTO, type Movimiento } from '@iot/shared';
-import { NOMBRE_MOVIMIENTO } from '../lib/formato.ts';
+import {
+  DIST_EVASION_CM,
+  PWM_MAX,
+  SENSORES_DE,
+  movimiento as movimientoDe,
+  type Movimiento,
+  type Sensor,
+} from '@iot/shared';
+import { NOMBRE_MOVIMIENTO, pwm } from '../lib/formato.ts';
 import { useSocket, useUltimaLectura } from '../lib/socket.tsx';
 import { Badge, Tarjeta } from './ui.tsx';
 
 /** Degradado de fondo por estado, con versión desaturada para el tema oscuro. */
 const FONDO: Record<Movimiento | 'atascado', string> = {
   avanzando: 'from-libre/25 to-libre/5 dark:from-libre/15 dark:to-transparent',
-  girando_izq: 'from-precaucion/25 to-precaucion/5 dark:from-precaucion/15 dark:to-transparent',
-  girando_der: 'from-precaucion/25 to-precaucion/5 dark:from-precaucion/15 dark:to-transparent',
+  girando_izquierda: 'from-precaucion/25 to-precaucion/5 dark:from-precaucion/15 dark:to-transparent',
+  girando_derecha: 'from-precaucion/25 to-precaucion/5 dark:from-precaucion/15 dark:to-transparent',
   retrocediendo: 'from-precaucion/30 to-precaucion/5 dark:from-precaucion/20 dark:to-transparent',
   detenido: 'from-tarjeta-tenue to-transparent',
   atascado: 'from-evasion/30 to-evasion/5 dark:from-evasion/20 dark:to-transparent',
 };
 
 /**
- * LED virtual: imita el patrón del LED físico descrito en firmware/led.py.
- *   fijo        en movimiento        1 Hz   pausado o detenido
+ * LED virtual: imita el patrón del LED físico del robot.
+ *   fijo        en movimiento        1 Hz   detenido
  *   4 Hz        evadiendo            doble  batería baja
  */
 function useParpadeo(patron: 'fijo' | 'lento' | 'rapido' | 'doble' | 'apagado'): boolean {
@@ -41,20 +48,23 @@ function useParpadeo(patron: 'fijo' | 'lento' | 'rapido' | 'doble' | 'apagado'):
   return encendido;
 }
 
-/** Barra de velocidad de una rueda, centrada en cero: -100 % a 100 %. */
-function BarraRueda({ etiqueta, pct }: { etiqueta: string; pct: number }) {
-  const ancho = Math.min(50, Math.abs(pct) / 2); // % del contenedor, media anchura por lado
+/**
+ * Barra del PWM de una rueda, centrada en cero: de -255 a 255. El signo es el sentido de
+ * giro, así que la barra crece a la derecha al avanzar y a la izquierda al retroceder.
+ */
+function BarraRueda({ etiqueta, valor }: { etiqueta: string; valor: number }) {
+  const ancho = (Math.min(PWM_MAX, Math.abs(valor)) / PWM_MAX) * 50; // media anchura por lado
   return (
     <div>
       <div className="mb-1 flex justify-between text-[12px] text-tinta-suave">
         <span>{etiqueta}</span>
-        <span className="tabular-nums text-tinta">{pct} %</span>
+        <span className="tabular-nums text-tinta">{pwm(valor)}</span>
       </div>
       <div className="relative h-2 rounded-full bg-tarjeta-tenue">
         <span className="absolute inset-y-0 left-1/2 w-px bg-borde" aria-hidden />
         <span
-          className={`absolute inset-y-0 rounded-full ${pct >= 0 ? 'bg-acento' : 'bg-precaucion'}`}
-          style={pct >= 0 ? { left: '50%', width: `${ancho}%` } : { right: '50%', width: `${ancho}%` }}
+          className={`absolute inset-y-0 rounded-full ${valor >= 0 ? 'bg-acento' : 'bg-precaucion'}`}
+          style={valor >= 0 ? { left: '50%', width: `${ancho}%` } : { right: '50%', width: `${ancho}%` }}
         />
       </div>
     </div>
@@ -62,29 +72,21 @@ function BarraRueda({ etiqueta, pct }: { etiqueta: string; pct: number }) {
 }
 
 export function TarjetaEstado() {
-  const { config, estado, estadoRobot } = useSocket();
+  const { estado, estadoRobot } = useSocket();
   const lectura = useUltimaLectura(3);
-  const cfg = config ?? CONFIG_POR_DEFECTO;
 
-  const distancias = [
-    { sensor: 'izq' as const, d: lectura?.distIzqCm ?? null },
-    { sensor: 'centro' as const, d: lectura?.distCentroCm ?? null },
-    { sensor: 'der' as const, d: lectura?.distDerCm ?? null },
-  ].filter((x) => x.d !== null) as { sensor: 'izq' | 'centro' | 'der'; d: number }[];
+  const distancias = (lectura ? SENSORES_DE(lectura) : []).filter((x) => x.d !== null) as {
+    sensor: Sensor;
+    d: number;
+  }[];
   const masCercano = distancias.length ? distancias.reduce((a, b) => (a.d <= b.d ? a : b)) : null;
 
-  const evadiendo = !!masCercano && masCercano.d <= cfg.distanciaEvasionCm;
-  const bateriaBaja = (lectura?.bateriaPct ?? 100) < 20;
-  const movimiento = lectura?.movimiento ?? 'detenido';
-  const atascado = evadiendo && distancias.length === 3 && distancias.every((x) => x.d <= cfg.distanciaEvasionCm);
+  const evadiendo = !!masCercano && masCercano.d <= DIST_EVASION_CM;
+  const bateriaBaja = (lectura?.bateriaPorcentaje ?? 100) < 20;
+  const movimiento = lectura ? movimientoDe(lectura.movimientoIzquierda, lectura.movimientoDerecha) : 'detenido';
+  const atascado = evadiendo && distancias.length === 3 && distancias.every((x) => x.d <= DIST_EVASION_CM);
 
-  const patron = bateriaBaja
-    ? 'doble'
-    : evadiendo
-      ? 'rapido'
-      : cfg.modo === 'automatico'
-        ? 'fijo'
-        : 'lento';
+  const patron = bateriaBaja ? 'doble' : evadiendo ? 'rapido' : movimiento === 'detenido' ? 'lento' : 'fijo';
   const led = useParpadeo(lectura ? patron : 'apagado');
 
   const conectado = estado === 'conectado' && !!estadoRobot?.enLinea;
@@ -93,7 +95,7 @@ export function TarjetaEstado() {
   return (
     <Tarjeta
       titulo="Estado del robot"
-      subtitulo={`Modo ${cfg.modo}`}
+      subtitulo={masCercano ? `Obstáculo más cercano a ${masCercano.d.toFixed(0)} cm` : 'Camino libre'}
       className={`bg-gradient-to-br ${fondo}`}
       accion={
         <span
@@ -112,8 +114,8 @@ export function TarjetaEstado() {
       </div>
 
       <div className="mt-4 space-y-3">
-        <BarraRueda etiqueta="Rueda izquierda" pct={lectura?.velIzqPct ?? 0} />
-        <BarraRueda etiqueta="Rueda derecha" pct={lectura?.velDerPct ?? 0} />
+        <BarraRueda etiqueta="Rueda izquierda" valor={lectura?.movimientoIzquierda ?? 0} />
+        <BarraRueda etiqueta="Rueda derecha" valor={lectura?.movimientoDerecha ?? 0} />
       </div>
     </Tarjeta>
   );

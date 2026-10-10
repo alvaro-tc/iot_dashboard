@@ -24,14 +24,30 @@ class ClienteMQTT:
             keepalive=30
         )
 
+        # Last Will: si el robot se queda sin bateria o pierde la red de golpe, el broker
+        # publica esto por el. Asi el dashboard sabe que esta fuera de linea sin sondear
+        # nada, y el backend cierra la sesion abierta.
+        cliente.set_last_will(
+            cfg.TOPIC_ESTADO,
+            json.dumps({"en_linea": False}),
+            retain=True,
+            qos=1
+        )
+
         cliente.connect()
 
         self.cliente = cliente
         self.conectado = True
 
+        # Estado retenido: el formato es el que valida el backend ({en_linea, firmware}).
         self.cliente.publish(
             cfg.TOPIC_ESTADO,
-            b'{"conectado":true}'
+            json.dumps({
+                "en_linea": True,
+                "firmware": cfg.VERSION_FIRMWARE
+            }),
+            retain=True,
+            qos=1
         )
 
     def publicar_telemetria(self, datos):
@@ -53,6 +69,14 @@ class ClienteMQTT:
     def desconectar(self):
         try:
             if self.cliente is not None:
+                # Desconexion ordenada: el Last Will no se dispara, asi que hay que
+                # publicar el estado a mano antes de cortar.
+                self.cliente.publish(
+                    cfg.TOPIC_ESTADO,
+                    json.dumps({"en_linea": False}),
+                    retain=True,
+                    qos=1
+                )
                 self.cliente.disconnect()
         except Exception:
             pass

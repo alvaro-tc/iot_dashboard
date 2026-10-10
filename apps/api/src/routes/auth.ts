@@ -22,7 +22,8 @@ export const nameSchema = z
   .min(2, 'El nombre debe tener al menos 2 caracteres.')
   .max(80, 'El nombre no puede superar 80 caracteres.');
 
-export const USER_COLUMNS = `id, email, name, role, is_active AS "isActive", created_at AS "createdAt"`;
+export const USER_COLUMNS = `id, correo AS email, nombre AS name, rol AS role,
+  activo AS "isActive", creado_en AS "createdAt"`;
 export const EMAIL_TAKEN = new HttpError(409, 'Revisa los campos marcados.', { email: 'Ya existe una cuenta con este correo.' });
 
 const signupSchema = z
@@ -41,7 +42,7 @@ authRouter.post('/auth/signup', async (req, res) => {
   const hash = await bcrypt.hash(body.password, 10);
   try {
     const { rows } = await pool.query(
-      `INSERT INTO users (email, password, name, role) VALUES ($1, $2, $3, 'client') RETURNING ${USER_COLUMNS}`,
+      `INSERT INTO usuarios (correo, contrasena, nombre, rol) VALUES ($1, $2, $3, 'cliente') RETURNING ${USER_COLUMNS}`,
       [body.email, hash, body.name],
     );
     res.status(201).json({ token: signToken(rows[0]), user: rows[0] });
@@ -53,7 +54,7 @@ authRouter.post('/auth/signup', async (req, res) => {
 
 authRouter.post('/auth/login', async (req, res) => {
   const body = parse(loginSchema, req.body);
-  const { rows } = await pool.query(`SELECT ${USER_COLUMNS}, password FROM users WHERE email = $1`, [body.email]);
+  const { rows } = await pool.query(`SELECT ${USER_COLUMNS}, contrasena AS password FROM usuarios WHERE correo = $1`, [body.email]);
   const row = rows[0];
   if (!row || !(await bcrypt.compare(body.password, row.password))) {
     throw new HttpError(401, 'Correo o contraseña incorrectos.');
@@ -64,7 +65,7 @@ authRouter.post('/auth/login', async (req, res) => {
 });
 
 authRouter.get('/me', requireAuth, async (req, res) => {
-  const { rows } = await pool.query(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [req.user.id]);
+  const { rows } = await pool.query(`SELECT ${USER_COLUMNS} FROM usuarios WHERE id = $1`, [req.user.id]);
   res.json(rows[0]);
 });
 
@@ -82,14 +83,14 @@ const meSchema = z
 authRouter.patch('/me', requireAuth, async (req, res) => {
   const body = parse(meSchema, req.body);
   if (body.newPassword) {
-    const { rows } = await pool.query('SELECT password FROM users WHERE id = $1', [req.user.id]);
+    const { rows } = await pool.query('SELECT contrasena AS password FROM usuarios WHERE id = $1', [req.user.id]);
     if (!(await bcrypt.compare(body.currentPassword!, rows[0].password))) {
       throw new HttpError(400, 'Revisa los campos marcados.', { currentPassword: 'La contraseña actual no es correcta.' });
     }
-    await pool.query('UPDATE users SET password = $2 WHERE id = $1', [req.user.id, await bcrypt.hash(body.newPassword, 10)]);
+    await pool.query('UPDATE usuarios SET contrasena = $2 WHERE id = $1', [req.user.id, await bcrypt.hash(body.newPassword, 10)]);
   }
   const { rows } = await pool.query(
-    `UPDATE users SET name = coalesce($2, name) WHERE id = $1 RETURNING ${USER_COLUMNS}`,
+    `UPDATE usuarios SET nombre = coalesce($2, nombre) WHERE id = $1 RETURNING ${USER_COLUMNS}`,
     [req.user.id, body.name ?? null],
   );
   res.json(rows[0]);

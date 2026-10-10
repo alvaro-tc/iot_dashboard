@@ -6,9 +6,9 @@ const EMAIL = 'admin@admin.com';
 const PASSWORD = 'admin1234';
 
 await pool.query(
-  `INSERT INTO users (email, password, name, role)
+  `INSERT INTO usuarios (correo, contrasena, nombre, rol)
    VALUES ($1, $2, 'Administración', 'admin')
-   ON CONFLICT (email) DO UPDATE SET password = $2, role = 'admin', is_active = true`,
+   ON CONFLICT (correo) DO UPDATE SET contrasena = $2, rol = 'admin', activo = true`,
   [EMAIL, await bcrypt.hash(PASSWORD, 10)],
 );
 console.log(`db: admin listo (${EMAIL} / ${PASSWORD})`);

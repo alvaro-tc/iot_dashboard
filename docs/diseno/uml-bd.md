@@ -1,6 +1,7 @@
 # Diagrama UML de la base de datos
 
 Fuente de verdad: `apps/api/db/schema.sql`. Si el esquema cambia, este diagrama se actualiza a mano.
+La explicación campo por campo está en [bd.md](./bd.md).
 
 ## Diagrama de clases (entidades y atributos)
 
@@ -8,23 +9,23 @@ Fuente de verdad: `apps/api/db/schema.sql`. Si el esquema cambia, este diagrama 
 classDiagram
   direction LR
 
-  class users {
+  class usuarios {
     +SERIAL id «PK»
-    TEXT email «UK»
-    TEXT password  // hash bcrypt
-    TEXT name
-    TEXT role  // admin | client
-    BOOLEAN is_active
-    TIMESTAMPTZ created_at
+    TEXT correo «UK»
+    TEXT contrasena  // hash bcrypt
+    TEXT nombre
+    TEXT rol  // admin | cliente
+    BOOLEAN activo
+    TIMESTAMPTZ creado_en
   }
 
   class dispositivos {
-    +TEXT id «PK»  // = usuario MQTT
-    INTEGER user_id «FK users»
+    +TEXT id «PK»  // = usuario MQTT = ROBOT_ID del firmware
+    INTEGER usuario_id «FK usuarios»
     TEXT nombre
     TEXT ubicacion
     TEXT token_hash  // hash bcrypt del token MQTT
-    BOOLEAN is_revoked
+    BOOLEAN revocado
     BOOLEAN en_linea
     TIMESTAMPTZ ultimo_contacto
     TEXT version_firmware
@@ -33,14 +34,8 @@ classDiagram
 
   class configuracion_dispositivo {
     +TEXT dispositivo_id «PK, FK dispositivos»
-    TEXT modo  // automatico | pausado | detenido
-    INTEGER distancia_evasion_cm  // 5..50
-    INTEGER distancia_precaucion_cm  // <= 100
-    INTEGER velocidad_base_pct  // 30..100
-    INTEGER intervalo_telemetria_ms  // 100..2000
-    JSONB angulos_sensores  // {izq,centro,der}
-    INTEGER area_ancho_cm
-    INTEGER area_alto_cm
+    SMALLINT velocidad_base  // PWM 0..255
+    JSONB angulos_sensores  // {izquierdo,central,derecho}
     TIMESTAMPTZ actualizado_en
   }
 
@@ -50,74 +45,46 @@ classDiagram
     TIMESTAMPTZ iniciada_en
     TIMESTAMPTZ finalizada_en  // null = activa
     INTEGER total_lecturas
-    INTEGER total_evasiones
-    NUMERIC distancia_recorrida_cm
-    SMALLINT bateria_inicio_pct
-    SMALLINT bateria_fin_pct
+    SMALLINT bateria_inicio_porcentaje
+    SMALLINT bateria_fin_porcentaje
   }
 
   class lecturas {
     +BIGSERIAL id «PK»
     TEXT dispositivo_id «FK dispositivos»
     BIGINT sesion_id «FK sesiones»
-    INTEGER secuencia  // UK (sesion_id, secuencia)
-    NUMERIC dist_izq_cm
-    NUMERIC dist_centro_cm
-    NUMERIC dist_der_cm
-    TEXT estado_movimiento
-    NUMERIC pos_x_cm
-    NUMERIC pos_y_cm
-    NUMERIC orientacion_deg
-    SMALLINT vel_izq_pct  // -100..100
-    SMALLINT vel_der_pct  // -100..100
-    NUMERIC bateria_v
-    SMALLINT bateria_pct
-    SMALLINT rssi_dbm
-    TIMESTAMPTZ medido_en  // reloj NTP del ESP32
-    TIMESTAMPTZ recibido_en
+    NUMERIC distancia_izquierda_cm  // null = nada en rango
+    NUMERIC distancia_central_cm
+    NUMERIC distancia_derecha_cm
+    SMALLINT movimiento_izquierda  // -255..255
+    SMALLINT movimiento_derecha  // -255..255
+    NUMERIC bateria_voltios
+    SMALLINT bateria_porcentaje  // 0..100
     TIMESTAMPTZ creado_en
   }
 
-  class eventos {
-    +BIGSERIAL id «PK»
-    TEXT dispositivo_id «FK dispositivos»
-    BIGINT sesion_id «FK sesiones»
-    TEXT tipo  // obstaculo | atascado | bateria_baja | conexion | desconexion | cambio_modo
-    TEXT sensor  // izq | centro | der
-    NUMERIC distancia_cm
-    NUMERIC pos_x_cm
-    NUMERIC pos_y_cm
-    TEXT mensaje
-    BOOLEAN atendido
-    TIMESTAMPTZ creado_en
-  }
-
-  users "1" --> "0..*" dispositivos : posee
+  usuarios "1" --> "0..*" dispositivos : posee
   dispositivos "1" --> "1" configuracion_dispositivo : configura
   dispositivos "1" --> "0..*" sesiones : ejecuta
   dispositivos "1" --> "0..*" lecturas : emite
-  dispositivos "1" --> "0..*" eventos : registra
   sesiones "1" --> "0..*" lecturas : agrupa
-  sesiones "1" --> "0..*" eventos : agrupa
 ```
 
 Todas las claves ajenas van con `ON DELETE CASCADE`: borrar un usuario borra sus robots, y
-con ellos su configuración, sesiones, lecturas y eventos.
+con ellos su configuración, sus sesiones y sus lecturas.
 
 ## Diagrama entidad-relación (cardinalidades)
 
 ```mermaid
 erDiagram
-  users ||--o{ dispositivos : "posee"
+  usuarios ||--o{ dispositivos : "posee"
   dispositivos ||--|| configuracion_dispositivo : "tiene (trigger)"
   dispositivos ||--o{ sesiones : "ejecuta"
   dispositivos ||--o{ lecturas : "emite"
-  dispositivos ||--o{ eventos : "registra"
   sesiones ||--o{ lecturas : "contiene"
-  sesiones ||--o{ eventos : "contiene"
 ```
 
-## Vistas y función (derivadas, no almacenan datos)
+## Vistas (derivadas, no almacenan datos)
 
 ```mermaid
 classDiagram
@@ -126,30 +93,40 @@ classDiagram
   class v_lecturas_por_minuto {
     <<view>>
     GROUP BY dispositivo_id, sesion_id, minuto
-    conteos por estado, min/prom distancias
-    prom_bateria_pct, latencia_ms
+    min/prom por sensor, prom PWM por rueda
+    lecturas_en_marcha / lecturas_detenido
+    prom_bateria_porcentaje
   }
   class v_lecturas_por_hora {
     <<view>>
     GROUP BY dispositivo_id, hora
-    + cerca_izq / cerca_centro / cerca_der (<= 15 cm)
+    + cerca_izquierda / cerca_central / cerca_derecha (<= 15 cm)
   }
   class v_resumen_sesion {
     <<view>>
-    duracion_s, pct_perdidas, latencia_ms
-    bateria_consumida_pct, evasiones por sensor
-  }
-  class obtener_mapa_sesion {
-    <<function>>
-    (p_sesion_id, p_max_puntos = 3000)
-    trayectoria muestreada + obstaculos JSONB
+    duracion_s, total_lecturas
+    bateria_consumida_porcentaje
+    lecturas_en_marcha / lecturas_detenido
+    min por sensor, cerca por sensor
   }
 
   v_lecturas_por_minuto ..> lecturas : lee
   v_lecturas_por_hora ..> lecturas : lee
   v_resumen_sesion ..> sesiones : lee
   v_resumen_sesion ..> lecturas : lee
-  v_resumen_sesion ..> eventos : lee
-  obtener_mapa_sesion ..> lecturas : lee
-  obtener_mapa_sesion ..> configuracion_dispositivo : lee angulos_sensores
+```
+
+## De dónde sale cada columna de `lecturas`
+
+El JSON que publica `firmware/main.py` en `roomba/{id}/telemetria` se guarda sin traducir:
+
+```mermaid
+flowchart LR
+  subgraph esp["ESP32 (firmware/)"]
+    J["{<br/>distancias_cm: {izquierdo, central, derecho},<br/>motores: {izquierda_pwm, derecha_pwm},<br/>bateria_v, bateria_porcentaje<br/>}"]
+  end
+  subgraph db["tabla lecturas"]
+    C["distancia_izquierda_cm · distancia_central_cm · distancia_derecha_cm<br/>movimiento_izquierda · movimiento_derecha<br/>bateria_voltios · bateria_porcentaje · creado_en"]
+  end
+  J -->|"MQTT → zod → persistencia"| C
 ```

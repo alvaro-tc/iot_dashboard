@@ -1,9 +1,9 @@
 // Un solo Socket.IO por pestaña, contra el namespace /live, autenticado con el JWT.
 //
 // El store vive aquí: todas las tarjetas leen del mismo estado y no se re-renderizan en
-// cascada por cada mensaje. La telemetría llega a 5 Hz, así que lo que cambia a esa
-// frecuencia (pose, distancias) se expone por suscripción imperativa (useTelemetria) en vez
-// de por estado de React; lo que cambia poco (config, estado en línea) sí es estado.
+// cascada por cada mensaje. Lo que cambia con cada lectura (distancias, motores) se expone
+// por suscripción imperativa (useTelemetria) en vez de por estado de React; lo que cambia
+// poco (config, estado en línea) sí es estado.
 import {
   createContext,
   useCallback,
@@ -14,7 +14,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { Configuracion, EventoRobot, Lectura } from '@iot/shared';
+import type { Configuracion, Lectura } from '@iot/shared';
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_URL, tokenStore } from './api.ts';
 import { useAuth } from './auth.tsx';
@@ -28,7 +28,6 @@ export interface EstadoRobot {
 }
 
 type OyenteTelemetria = (l: Lectura) => void;
-type OyenteEvento = (e: EventoRobot) => void;
 
 interface ValorSocket {
   estado: EstadoSocket;
@@ -44,15 +43,13 @@ interface ValorSocket {
   /** Desfase del reloj del navegador respecto al servidor, en ms. */
   desfaseReloj: () => number;
   suscribirTelemetria: (fn: OyenteTelemetria) => () => void;
-  suscribirEventos: (fn: OyenteEvento) => () => void;
-  enviarComando: (accion: 'iniciar' | 'pausar' | 'detener') => Promise<{ ok: boolean; confirmado?: boolean; error?: string }>;
   actualizarConfig: (cambio: Partial<Configuracion>) => Promise<{ ok: boolean; error?: string }>;
 }
 
 const ContextoSocket = createContext<ValorSocket>(null!);
 export const useSocket = () => useContext(ContextoSocket);
 
-const MAX_HISTORIAL = 600; // ~2 min a 5 Hz: suficiente para la gráfica de 1 min y el mapa
+const MAX_HISTORIAL = 600; // ~5 min a 2 Hz: suficiente para las gráficas en vivo
 
 export function ProveedorSocket({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -66,7 +63,6 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
   const historialRef = useRef<Lectura[]>([]);
   const desfaseRef = useRef(0);
   const oyentesTel = useRef(new Set<OyenteTelemetria>());
-  const oyentesEv = useRef(new Set<OyenteEvento>());
   // La sala a la que hay que (re)unirse. En una ref para que el handler de 'connect' lea
   // siempre el robot actual sin tener que recrear el socket al cambiar de robot.
   const salaRef = useRef<string | null>(null);
@@ -118,7 +114,6 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
       if (historialRef.current.length > MAX_HISTORIAL) historialRef.current.shift();
       oyentesTel.current.forEach((fn) => fn(l));
     });
-    socket.on('evento', (e: EventoRobot) => oyentesEv.current.forEach((fn) => fn(e)));
     socket.on('config', (c: Configuracion) => setConfig(c));
     socket.on('estado', (e: EstadoRobot) => setEstadoRobot(e));
 
@@ -158,16 +153,6 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
         oyentesTel.current.add(fn);
         return () => void oyentesTel.current.delete(fn);
       },
-      suscribirEventos: (fn) => {
-        oyentesEv.current.add(fn);
-        return () => void oyentesEv.current.delete(fn);
-      },
-      enviarComando: (accion) =>
-        new Promise((resolve) => {
-          const socket = socketRef.current;
-          if (!socket || !robotId) return resolve({ ok: false, error: 'Sin conexión con el servidor.' });
-          socket.emit('comando', { dispositivoId: robotId, accion }, resolve);
-        }),
       actualizarConfig: (cambio) =>
         new Promise((resolve) => {
           const socket = socketRef.current;
@@ -192,17 +177,9 @@ export function useTelemetria(fn: OyenteTelemetria): void {
   useEffect(() => suscribirTelemetria((l) => ref.current(l)), [suscribirTelemetria]);
 }
 
-export function useEventosRobot(fn: OyenteEvento): void {
-  const { suscribirEventos } = useSocket();
-  const ref = useRef(fn);
-  ref.current = fn;
-  useEffect(() => suscribirEventos((e) => ref.current(e)), [suscribirEventos]);
-}
-
 /**
  * Re-renderiza con la última lectura, como mucho `hz` veces por segundo. Las tarjetas de
- * texto no necesitan 5 actualizaciones por segundo; el mapa, que sí, usa useTelemetria
- * directamente con requestAnimationFrame.
+ * texto no necesitan refrescarse con cada mensaje; las gráficas usan useTelemetria directamente.
  */
 export function useUltimaLectura(hz = 2): Lectura | null {
   const { ultima, idConexion } = useSocket();

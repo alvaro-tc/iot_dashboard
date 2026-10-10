@@ -1,6 +1,4 @@
-import type { Movimiento, Sensor, TipoEvento } from '@iot/shared';
-
-export type Role = 'admin' | 'client';
+export type Role = 'admin' | 'cliente';
 
 export interface User {
   id: number;
@@ -41,88 +39,78 @@ export interface AltaDispositivo {
   broker: { host: string; port: number };
 }
 
+/** Una fila de v_resumen_sesion. */
 export interface ResumenSesion {
   id: number;
   iniciadaEn: string;
   finalizadaEn: string | null;
   duracionS: number;
-  distanciaCm: number;
-  evasiones: number;
   lecturas: number;
-  bateriaInicioPct: number | null;
-  bateriaFinPct: number | null;
-  bateriaConsumidaPct: number | null;
-  pctPerdidas: number;
-  latenciaMs: number | null;
-  nAvanzando: number;
-  nGirandoIzq: number;
-  nGirandoDer: number;
-  nRetrocediendo: number;
-  nDetenido: number;
-  evasionesIzq: number;
-  evasionesCentro: number;
-  evasionesDer: number;
+  bateriaInicioPorcentaje: number | null;
+  bateriaFinPorcentaje: number | null;
+  bateriaConsumidaPorcentaje: number | null;
+  lecturasEnMarcha: number;
+  lecturasDetenido: number;
+  promPwmIzquierda: number | null;
+  promPwmDerecha: number | null;
+  minIzquierdaCm: number | null;
+  minCentralCm: number | null;
+  minDerechaCm: number | null;
+  cercaIzquierda: number;
+  cercaCentral: number;
+  cercaDerecha: number;
 }
 
-/** Una fila de obtener_mapa_sesion: pose + obstáculos ya proyectados por Postgres. */
-export interface PuntoMapa {
-  secuencia: number;
-  medido_en: string;
-  x: number;
-  y: number;
-  theta: number;
-  estado_movimiento: Movimiento;
-  bateria_pct: number | null;
-  obstaculos: { sensor: Sensor; d: number; x: number; y: number }[];
-}
-
-export interface EventoFila {
-  id: number;
-  tipo: TipoEvento;
-  sensor: Sensor | null;
-  distanciaCm: number | null;
-  posXCm: number | null;
-  posYCm: number | null;
-  mensaje: string;
-  atendido: boolean;
-  creadoEn: string;
-  sesionId: number | null;
-}
-
+/** Una fila de v_lecturas_por_minuto / v_lecturas_por_hora. */
 export interface LecturaAgregada {
   instante: string;
   lecturas: number;
-  minIzqCm: number | null;
-  minCentroCm: number | null;
-  minDerCm: number | null;
-  promIzqCm: number | null;
-  promCentroCm: number | null;
-  promDerCm: number | null;
-  nAvanzando: number;
-  nGirandoIzq: number;
-  nGirandoDer: number;
-  nRetrocediendo: number;
-  nDetenido: number;
-  promBateriaPct: number | null;
-  latenciaMs: number | null;
+  minIzquierdaCm: number | null;
+  minCentralCm: number | null;
+  minDerechaCm: number | null;
+  promIzquierdaCm: number | null;
+  promCentralCm: number | null;
+  promDerechaCm: number | null;
+  promPwmIzquierda: number | null;
+  promPwmDerecha: number | null;
+  lecturasEnMarcha: number;
+  lecturasDetenido: number;
+  promBateriaPorcentaje: number | null;
+  /** Solo en la agregación por hora: lecturas con ese sensor a 15 cm o menos. */
+  cercaIzquierda?: number;
+  cercaCentral?: number;
+  cercaDerecha?: number;
+}
+
+/** Una lectura cruda tal como la devuelve la API (igual que `Lectura`, con fechas ISO). */
+export interface LecturaFila {
+  id: number;
+  sesionId: number | null;
+  distanciaIzquierdaCm: number | null;
+  distanciaCentralCm: number | null;
+  distanciaDerechaCm: number | null;
+  movimientoIzquierda: number;
+  movimientoDerecha: number;
+  bateriaVoltios: number | null;
+  bateriaPorcentaje: number | null;
+  creadoEn: string;
 }
 
 export interface Resumen {
   segundosHoy: number;
-  distanciaHoyCm: number;
-  evasionesIzq: number;
-  evasionesCentro: number;
-  evasionesDer: number;
-  latenciaMs: number | null;
-  bateriaPct: number | null;
-  movimientos: Record<Movimiento, number> | null;
+  lecturasEnMarchaHoy: number;
+  lecturasDetenidoHoy: number;
+  cercaIzquierda: number;
+  cercaCentral: number;
+  cercaDerecha: number;
+  bateriaPorcentaje: number | null;
+  bateriaVoltios: number | null;
   mensajesPorSegundo: number;
   sesion: {
     id: number;
     iniciadaEn: number;
     lecturas: number;
-    evasiones: number;
-    distanciaCm: number;
-    pctPerdidas: number;
+    bateriaInicioPorcentaje: number | null;
+    bateriaPorcentaje: number | null;
   } | null;
 }

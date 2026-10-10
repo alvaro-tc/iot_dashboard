@@ -56,10 +56,9 @@ import { TarjetaConectividad } from '../components/TarjetaConectividad.tsx';
 import { TarjetaContador, useResumen } from '../components/TarjetaContador.tsx';
 import { TarjetaDistancias } from '../components/TarjetaDistancias.tsx';
 import { TarjetaEstado } from '../components/TarjetaEstado.tsx';
-import { TarjetaEvasion } from '../components/TarjetaEvasion.tsx';
-import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { TarjetaMotor } from '../components/TarjetaMotor.tsx';
-import { TarjetaSesiones, type EstadoRepeticion } from '../components/TarjetaSesiones.tsx';
+import { TarjetaRadar } from '../components/TarjetaRadar.tsx';
+import { TarjetaSesiones } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
 
 /** Id de la miniatura del contador: no está en el tablero, así que sale con la métrica de fábrica. */
@@ -318,9 +317,8 @@ export function Panel() {
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [editando, setEditando] = useState(false);
   const [widget, setWidget] = useState<IdTarjeta | null>(null);
-  const [repeticion, setRepeticion] = useState<EstadoRepeticion | null>(null);
 
-  const { data: resumen } = useResumen();
+  useResumen(); // calienta la caché que comparten los contadores
 
   // En una sola columna no hay nada que reordenar ni forma de que todo quepa sin scroll: los
   // tiradores solo estorbarían. Se decide con el ancho de la FILA, que no cambia al abrir el
@@ -380,35 +378,31 @@ export function Panel() {
   }
 
 
-  /** Una tarjeta por id. El alto del mapa es flexible: lo manda la celda de la grilla. */
+  /** Una tarjeta por id. El alto del radar es flexible: lo manda la celda de la grilla. */
   const tarjeta = (id: IdTarjeta) => {
     switch (id) {
-      case 'mapa':
-        return <TarjetaMapa vista="mapa" alto="min-h-0 flex-1" repeticion={repeticion} soloVista />;
       case 'radar':
-        return <TarjetaMapa vista="radar" alto="min-h-0 flex-1" soloVista />;
+        return <TarjetaRadar />;
       case 'sesiones':
-        return <TarjetaSesiones repeticion={repeticion} onRepetir={setRepeticion} />;
+        return <TarjetaSesiones />;
       case 'estado':
         return <TarjetaEstado />;
       case 'conectividad':
-        return <TarjetaConectividad pctPerdidas={resumen?.sesion?.pctPerdidas ?? null} />;
+        return <TarjetaConectividad />;
       case 'distancias':
         return <TarjetaDistancias />;
       case 'bateria':
         return <TarjetaBateria />;
-      case 'evasion':
-        return <TarjetaEvasion />;
       case 'motor-izq':
-        return <TarjetaMotor motor="izq" />;
+        return <TarjetaMotor motor="izquierdo" />;
       case 'motor-der':
-        return <TarjetaMotor motor="der" />;
+        return <TarjetaMotor motor="derecho" />;
       case 'dist-izq':
-        return <TarjetaDistancias solo="izq" />;
+        return <TarjetaDistancias solo="izquierdo" />;
       case 'dist-centro':
-        return <TarjetaDistancias solo="centro" />;
+        return <TarjetaDistancias solo="central" />;
       case 'dist-der':
-        return <TarjetaDistancias solo="der" />;
+        return <TarjetaDistancias solo="derecho" />;
       default:
         // Contadores: tantos como se añadan, cada uno con su métrica.
         return esContador(id) ? <TarjetaContador id={id} /> : null;
@@ -522,13 +516,6 @@ export function Panel() {
             }
           />
         </div>
-      )}
-
-      {robot && (
-        <p className="shrink-0 px-2 text-[12px] text-tinta-suave">
-          La posición del mapa es una estimación por odometría y acumula error con el tiempo. Pulsa «Detener» y
-          vuelve a «Iniciar» para reiniciar el origen.
-        </p>
       )}
 
       {nuevoRobot && <DialogoNuevoRobot onCerrar={() => setNuevoRobot(false)} />}

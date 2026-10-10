@@ -6,7 +6,15 @@
 // gráfica por sensor (tres widgets) además de la de los tres juntos. Los datos y los umbrales
 // son los mismos; cambia qué series se pintan.
 import { useEffect, useRef } from 'react';
-import { CONFIG_POR_DEFECTO, SENSORES, type Lectura, type Movimiento, type Sensor } from '@iot/shared';
+import {
+  DIST_EVASION_CM,
+  DIST_PRECAUCION_CM,
+  SENSORES,
+  movimiento,
+  type Lectura,
+  type Movimiento,
+  type Sensor,
+} from '@iot/shared';
 import { Chart } from '../lib/chart.ts';
 import { NOMBRE_SENSOR } from '../lib/formato.ts';
 import { useSocket, useTelemetria } from '../lib/socket.tsx';
@@ -15,11 +23,14 @@ import { Tarjeta } from './ui.tsx';
 
 const VENTANA_MS = 300_000; // 5 minutos
 
-/** Color de la franja de estado de movimiento bajo el eje X. */
+/**
+ * Color de la franja de movimiento bajo el eje X. El movimiento no viene en la lectura: se
+ * deduce del PWM de las dos ruedas (`movimiento` en @iot/shared).
+ */
 const COLOR_MOVIMIENTO: Record<Movimiento, string> = {
   avanzando: '#10b981',
-  girando_izq: '#f59e0b',
-  girando_der: '#f59e0b',
+  girando_izquierda: '#f59e0b',
+  girando_derecha: '#f59e0b',
   retrocediendo: '#ef4444',
   detenido: '#94a3b8',
 };
@@ -55,37 +66,37 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
-  const { config, idConexion, historial } = useSocket();
-  const cfg = config ?? CONFIG_POR_DEFECTO;
+  const { idConexion, historial } = useSocket();
 
-  const datos = useRef<{ izq: { x: number; y: number }[]; centro: { x: number; y: number }[]; der: { x: number; y: number }[] }>({
-    izq: [],
-    centro: [],
-    der: [],
-  });
+  const datos = useRef<{
+    izquierdo: { x: number; y: number }[];
+    central: { x: number; y: number }[];
+    derecho: { x: number; y: number }[];
+  }>({ izquierdo: [], central: [], derecho: [] });
   const estados = useRef<{ x: number; e: Movimiento }[]>([]);
   const pendiente = useRef(false);
 
   const agregar = (l: Lectura) => {
-    const t = l.medidoEn;
+    const t = l.creadoEn;
     // null = sin objeto en rango: se corta la línea en vez de dibujar un cero falso.
-    datos.current.izq.push({ x: t, y: l.distIzqCm as number });
-    datos.current.centro.push({ x: t, y: l.distCentroCm as number });
-    datos.current.der.push({ x: t, y: l.distDerCm as number });
+    datos.current.izquierdo.push({ x: t, y: l.distanciaIzquierdaCm as number });
+    datos.current.central.push({ x: t, y: l.distanciaCentralCm as number });
+    datos.current.derecho.push({ x: t, y: l.distanciaDerechaCm as number });
+    const e = movimiento(l.movimientoIzquierda, l.movimientoDerecha);
     const ultimo = estados.current.at(-1);
-    if (!ultimo || ultimo.e !== l.movimiento) estados.current.push({ x: t, e: l.movimiento });
+    if (!ultimo || ultimo.e !== e) estados.current.push({ x: t, e });
   };
 
   const podar = () => {
     const corte = Date.now() - VENTANA_MS;
-    for (const k of ['izq', 'centro', 'der'] as const) {
+    for (const k of SENSORES) {
       datos.current[k] = datos.current[k].filter((p) => p.x > corte);
     }
     estados.current = estados.current.filter((p, i) => p.x > corte || estados.current[i + 1]?.x > corte);
   };
 
-  // Las gráficas de línea se limitan a 10 fps: a 5 Hz por robot y 3 series, redibujar en
-  // cada mensaje no aporta nada que el ojo vea.
+  // Las gráficas de línea se limitan a 10 fps: redibujar en cada mensaje no aporta nada
+  // que el ojo vea.
   useTelemetria((l) => {
     agregar(l);
     if (pendiente.current) return;
@@ -99,7 +110,7 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
 
   // Al conectar, se siembra con el historial en memoria.
   useEffect(() => {
-    datos.current = { izq: [], centro: [], der: [] };
+    datos.current = { izquierdo: [], central: [], derecho: [] };
     estados.current = [];
     for (const l of historial()) agregar(l);
     podar();
@@ -109,7 +120,7 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const serie = (etiqueta: string, color: string, clave: 'izq' | 'centro' | 'der') => ({
+    const serie = (etiqueta: string, color: string, clave: Sensor) => ({
       label: etiqueta,
       data: datos.current[clave],
       borderColor: color,
@@ -121,9 +132,9 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
     });
 
     const todas = [
-      serie('Izquierdo', '#60a5fa', 'izq'),
-      serie('Central', colores.acento, 'centro'),
-      serie('Derecho', '#a78bfa', 'der'),
+      serie('Izquierdo', '#60a5fa', 'izquierdo'),
+      serie('Central', colores.acento, 'central'),
+      serie('Derecho', '#a78bfa', 'derecho'),
     ];
 
     const chart = new Chart(canvas, {
@@ -152,8 +163,8 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
             annotations: {
               evasion: {
                 type: 'line',
-                yMin: cfg.distanciaEvasionCm,
-                yMax: cfg.distanciaEvasionCm,
+                yMin: DIST_EVASION_CM,
+                yMax: DIST_EVASION_CM,
                 borderColor: colores.evasion,
                 borderWidth: 1,
                 borderDash: [4, 4],
@@ -161,8 +172,8 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
               },
               precaucion: {
                 type: 'line',
-                yMin: cfg.distanciaPrecaucionCm,
-                yMax: cfg.distanciaPrecaucionCm,
+                yMin: DIST_PRECAUCION_CM,
+                yMax: DIST_PRECAUCION_CM,
                 borderColor: colores.precaucion,
                 borderWidth: 1,
                 borderDash: [4, 4],
@@ -198,7 +209,7 @@ export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
       chart.destroy();
       chartRef.current = null;
     };
-  }, [colores.tema, cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm, solo]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [colores.tema, solo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Tarjeta

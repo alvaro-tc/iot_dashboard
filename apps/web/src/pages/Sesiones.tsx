@@ -1,20 +1,22 @@
-// /sesiones — lista de sesiones con el detalle de la seleccionada: mapa completo del
-// recorrido, dona de estados de movimiento y barras de evasiones por sensor.
+// /sesiones — lista de sesiones con el detalle de la seleccionada: reparto entre marcha y
+// parada, PWM medio de cada rueda y en qué sensor se encontró más obstáculos.
+//
+// Ya no hay recorrido que dibujar: la base guarda distancias, motores y batería, no la pose.
 import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api.ts';
 import { Chart } from '../lib/chart.ts';
-import { distancia, duracion, fechaHora, hora, ms, pct } from '../lib/formato.ts';
+import { cm, duracion, fechaHora, hora, pct } from '../lib/formato.ts';
+import { INTERVALO_TELEMETRIA_MS } from '../lib/metricas.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
-import type { PuntoMapa, ResumenSesion } from '../lib/types.ts';
-import { MapaVivo, type MapaApi } from '../components/MapaVivo.tsx';
-import { aPose } from '../components/TarjetaSesiones.tsx';
+import type { ResumenSesion } from '../lib/types.ts';
 import { Esqueleto, Tarjeta, Vacio } from '../components/ui.tsx';
-import { CONFIG_POR_DEFECTO } from '@iot/shared';
-import { useSocket } from '../lib/socket.tsx';
 
-function DonaMovimientos({ s }: { s: ResumenSesion }) {
+/** Segundos de una cuenta de lecturas: cada lectura vale un intervalo de telemetría. */
+const segundos = (lecturas: number | null) => ((lecturas ?? 0) * INTERVALO_TELEMETRIA_MS) / 1000;
+
+function DonaMarcha({ s }: { s: ResumenSesion }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colores = useColoresTema();
 
@@ -24,11 +26,11 @@ function DonaMovimientos({ s }: { s: ResumenSesion }) {
     const chart = new Chart(canvas, {
       type: 'doughnut',
       data: {
-        labels: ['Avanzando', 'Girando izq.', 'Girando der.', 'Retrocediendo', 'Detenido'],
+        labels: ['En marcha', 'Detenido'],
         datasets: [
           {
-            data: [s.nAvanzando, s.nGirandoIzq, s.nGirandoDer, s.nRetrocediendo, s.nDetenido],
-            backgroundColor: [colores.libre, colores.precaucion, '#fbbf24', colores.evasion, colores.tintaSuave],
+            data: [s.lecturasEnMarcha ?? 0, s.lecturasDetenido ?? 0],
+            backgroundColor: [colores.libre, colores.tintaSuave],
             borderWidth: 0,
           },
         ],
@@ -39,16 +41,17 @@ function DonaMovimientos({ s }: { s: ResumenSesion }) {
         cutout: '58%',
         plugins: {
           legend: { position: 'bottom', labels: { color: colores.tintaSuave, boxWidth: 10, usePointStyle: true } },
+          tooltip: { callbacks: { label: (i) => `${i.label}: ${duracion(segundos(Number(i.parsed)))}` } },
         },
       },
     });
     return () => chart.destroy();
   }, [s, colores.tema]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <canvas ref={canvasRef} role="img" aria-label="Distribución de estados de movimiento" />;
+  return <canvas ref={canvasRef} role="img" aria-label="Reparto entre tiempo en marcha y detenido" />;
 }
 
-function BarrasEvasiones({ s }: { s: ResumenSesion }) {
+function BarrasObstaculos({ s }: { s: ResumenSesion }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colores = useColoresTema();
 
@@ -61,8 +64,8 @@ function BarrasEvasiones({ s }: { s: ResumenSesion }) {
         labels: ['Izquierdo', 'Central', 'Derecho'],
         datasets: [
           {
-            label: 'Evasiones',
-            data: [s.evasionesIzq, s.evasionesCentro, s.evasionesDer],
+            label: 'Lecturas con obstáculo cerca',
+            data: [s.cercaIzquierda ?? 0, s.cercaCentral ?? 0, s.cercaDerecha ?? 0],
             backgroundColor: colores.acento,
             borderRadius: 8,
           },
@@ -86,14 +89,12 @@ function BarrasEvasiones({ s }: { s: ResumenSesion }) {
     return () => chart.destroy();
   }, [s, colores.tema]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <canvas ref={canvasRef} role="img" aria-label="Evasiones por sensor" />;
+  return <canvas ref={canvasRef} role="img" aria-label="Lecturas con obstáculo cerca, por sensor" />;
 }
 
 export function Sesiones() {
   const { robot } = useRobots();
-  const { config } = useSocket();
   const [seleccion, setSeleccion] = useState<number | null>(null);
-  const mapa = useRef<MapaApi>(null);
 
   const { data: sesiones, isLoading } = useQuery<ResumenSesion[]>({
     queryKey: ['sesiones', robot?.id],
@@ -104,18 +105,6 @@ export function Sesiones() {
   const lista = sesiones ?? [];
   const actual = lista.find((s) => s.id === seleccion) ?? lista[0] ?? null;
 
-  const { data: recorrido } = useQuery<PuntoMapa[]>({
-    queryKey: ['mapa-sesion-completo', actual?.id],
-    queryFn: () => api(`/api/sesiones/${actual!.id}/mapa`),
-    enabled: !!actual,
-    staleTime: 5 * 60_000,
-  });
-
-  useEffect(() => {
-    if (!recorrido) return;
-    mapa.current?.cargar(recorrido.map(aPose));
-  }, [recorrido]);
-
   if (isLoading) return <Esqueleto className="h-[400px]" />;
 
   if (!lista.length) {
@@ -123,7 +112,7 @@ export function Sesiones() {
       <Tarjeta titulo="Sesiones">
         <Vacio
           titulo="Sin sesiones todavía"
-          descripcion="Cada vez que el robot pase a modo automático se abrirá una sesión y aparecerá aquí."
+          descripcion="En cuanto el robot empiece a publicar telemetría se abrirá una sesión y aparecerá aquí."
         />
       </Tarjeta>
     );
@@ -148,7 +137,7 @@ export function Sesiones() {
                   {!s.finalizadaEn && <span className="badge bg-evasion/15 text-evasion">en curso</span>}
                 </div>
                 <p className="text-[12px] text-tinta-suave">
-                  {fechaHora(s.iniciadaEn)} · {duracion(s.duracionS)} · {distancia(s.distanciaCm)}
+                  {fechaHora(s.iniciadaEn)} · {duracion(s.duracionS)} · {s.lecturas.toLocaleString('es')} lecturas
                 </p>
               </button>
             </li>
@@ -159,35 +148,38 @@ export function Sesiones() {
       {actual && (
         <div className="grid content-start gap-4">
           <Tarjeta
-            titulo={`Recorrido de la sesión ${hora(actual.iniciadaEn)}`}
-            subtitulo={`${actual.lecturas} lecturas · ${pct(actual.pctPerdidas)} perdidas · latencia media ${ms(actual.latenciaMs)}`}
+            titulo={`Sesión ${hora(actual.iniciadaEn)}`}
+            subtitulo={`${actual.lecturas.toLocaleString('es')} lecturas · ${
+              actual.finalizadaEn ? `terminó ${hora(actual.finalizadaEn)}` : 'en curso'
+            }`}
           >
-            <div className="h-[340px] overflow-hidden rounded-[1.25rem] bg-[#0f172a]">
-              <MapaVivo
-                ref={mapa}
-                config={config ?? CONFIG_POR_DEFECTO}
-                seguir={false}
-                mostrarHaces={false}
-                area={{ ancho: config?.areaAnchoCm ?? 500, alto: config?.areaAltoCm ?? 400 }}
-              />
-            </div>
-            <dl className="mt-4 grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
+            <dl className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
               <Dato etiqueta="Duración" valor={duracion(actual.duracionS)} />
-              <Dato etiqueta="Distancia" valor={distancia(actual.distanciaCm)} />
-              <Dato etiqueta="Evasiones" valor={String(actual.evasiones)} />
-              <Dato etiqueta="Batería consumida" valor={pct(actual.bateriaConsumidaPct)} />
+              <Dato etiqueta="En marcha" valor={duracion(segundos(actual.lecturasEnMarcha))} />
+              <Dato etiqueta="Batería consumida" valor={pct(actual.bateriaConsumidaPorcentaje)} />
+              <Dato
+                etiqueta="PWM medio"
+                valor={`${Math.round(actual.promPwmIzquierda ?? 0)} / ${Math.round(actual.promPwmDerecha ?? 0)}`}
+              />
+              <Dato etiqueta="Mínima izquierda" valor={cm(actual.minIzquierdaCm)} />
+              <Dato etiqueta="Mínima central" valor={cm(actual.minCentralCm)} />
+              <Dato etiqueta="Mínima derecha" valor={cm(actual.minDerechaCm)} />
+              <Dato
+                etiqueta="Batería"
+                valor={`${pct(actual.bateriaInicioPorcentaje)} → ${pct(actual.bateriaFinPorcentaje)}`}
+              />
             </dl>
           </Tarjeta>
 
           <div className="grid gap-4 md:grid-cols-2">
-            <Tarjeta titulo="Estados de movimiento" subtitulo="Reparto de las lecturas">
+            <Tarjeta titulo="Marcha y parada" subtitulo="Reparto de las lecturas">
               <div className="h-[240px]">
-                <DonaMovimientos s={actual} />
+                <DonaMarcha s={actual} />
               </div>
             </Tarjeta>
-            <Tarjeta titulo="Evasiones por sensor" subtitulo="Qué lado encontró más muebles">
+            <Tarjeta titulo="Obstáculos por sensor" subtitulo="Lecturas a 15 cm o menos">
               <div className="h-[240px]">
-                <BarrasEvasiones s={actual} />
+                <BarrasObstaculos s={actual} />
               </div>
             </Tarjeta>
           </div>

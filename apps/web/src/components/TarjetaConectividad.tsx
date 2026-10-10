@@ -1,17 +1,23 @@
-// "Conectividad": equivale a la tarjeta de Wi-Fi de la referencia.
-// Señal del robot, estado de MQTT y del WebSocket, latencia extremo a extremo y msg/s.
+// "Conectividad": estado de la cadena robot -> broker -> navegador.
+//
+// Ya no hay RSSI ni marca de tiempo del robot en la lectura, así que no se puede medir la
+// latencia extremo a extremo ni la señal WiFi. Lo que sí se mide desde aquí es la CADENCIA:
+// cuántos mensajes llegan por segundo y cuánto hace que llegó el último. Si el robot publica
+// cada 500 ms, 2 msg/s es lo normal y menos significa que algo va mal por el camino.
 import { useEffect, useRef, useState } from 'react';
 import { Wifi, WifiOff } from 'lucide-react';
 import { Chart } from '../lib/chart.ts';
-import { ms, senalPct } from '../lib/formato.ts';
+import { haceCuanto } from '../lib/formato.ts';
 import { useSocket, useTelemetria, useUltimaLectura } from '../lib/socket.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 import { Tarjeta } from './ui.tsx';
 
 const VENTANA_MS = 120_000; // sparkline de los últimos 2 minutos
+/** Cadencia esperada con INTERVALO_MQTT_MS = 500 ms: 2 mensajes por segundo. */
+const ESPERADO_MSG_S = 2;
 
-/** Sparkline de la latencia. Chart.js en modo mínimo: sin ejes, sin leyenda, sin tooltip. */
-function SparklineLatencia({ puntos }: { puntos: { x: number; y: number }[] }) {
+/** Sparkline de la cadencia. Chart.js en modo mínimo: sin ejes, sin leyenda, sin tooltip. */
+function SparklineCadencia({ puntos }: { puntos: { x: number; y: number }[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
@@ -57,30 +63,25 @@ function SparklineLatencia({ puntos }: { puntos: { x: number; y: number }[] }) {
     chart.update('none');
   }, [puntos]);
 
-  return <canvas ref={canvasRef} className="size-full" role="img" aria-label="Latencia de los últimos 2 minutos" />;
+  return <canvas ref={canvasRef} className="size-full" role="img" aria-label="Mensajes por segundo de los últimos 2 minutos" />;
 }
 
-export function TarjetaConectividad({ pctPerdidas }: { pctPerdidas: number | null }) {
-  const { estado, estadoRobot, desfaseReloj } = useSocket();
-  const lectura = useUltimaLectura(2);
-  const [latencias, setLatencias] = useState<{ x: number; y: number }[]>([]);
+export function TarjetaConectividad() {
+  const { estado, estadoRobot } = useSocket();
+  const lectura = useUltimaLectura(1);
+  const [cadencia, setCadencia] = useState<{ x: number; y: number }[]>([]);
   const [msgPorSeg, setMsgPorSeg] = useState(0);
   const marcas = useRef<number[]>([]);
 
-  useTelemetria((l) => {
-    const ahora = Date.now();
-    // La latencia se corrige con el desfase de relojes medido al conectar; si no, mediría
-    // la diferencia entre el reloj del navegador y el NTP del robot.
-    const latencia = Math.max(0, ahora - desfaseReloj() - l.medidoEn);
-    setLatencias((xs) => [...xs, { x: ahora, y: latencia }].filter((p) => p.x > ahora - VENTANA_MS));
-    marcas.current.push(ahora);
-  });
+  useTelemetria(() => marcas.current.push(Date.now()));
 
   useEffect(() => {
     const id = setInterval(() => {
-      const corte = Date.now() - 1000;
-      marcas.current = marcas.current.filter((m) => m > corte);
-      setMsgPorSeg(marcas.current.length);
+      const ahora = Date.now();
+      marcas.current = marcas.current.filter((m) => m > ahora - 1000);
+      const n = marcas.current.length;
+      setMsgPorSeg(n);
+      setCadencia((xs) => [...xs, { x: ahora, y: n }].filter((p) => p.x > ahora - VENTANA_MS));
     }, 1000);
     return () => clearInterval(id);
   }, []);
@@ -88,8 +89,8 @@ export function TarjetaConectividad({ pctPerdidas }: { pctPerdidas: number | nul
   const wsOk = estado === 'conectado';
   const robotOk = !!estadoRobot?.enLinea;
   const todoOk = wsOk && robotOk;
-  const senal = senalPct(lectura?.rssiDbm);
-  const ultimaLatencia = latencias.at(-1)?.y ?? null;
+  // Porcentaje de la cadencia esperada, acotado a 100: es la "barra de señal" de la cadena.
+  const salud = Math.min(100, Math.round((msgPorSeg / ESPERADO_MSG_S) * 100));
 
   return (
     <Tarjeta
@@ -103,27 +104,25 @@ export function TarjetaConectividad({ pctPerdidas }: { pctPerdidas: number | nul
       }
     >
       <div className="flex items-end gap-2">
-        <span className="text-[32px] leading-none font-bold tabular-nums">{senal ?? '—'}</span>
-        <span className="pb-1 text-[14px] text-tinta-suave">
-          % {lectura?.rssiDbm !== undefined && lectura?.rssiDbm !== null ? `· ${lectura.rssiDbm} dBm` : ''}
-        </span>
+        <span className="text-[32px] leading-none font-bold tabular-nums">{msgPorSeg}</span>
+        <span className="pb-1 text-[14px] text-tinta-suave">mensajes/s</span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-tarjeta-tenue">
-        <div className="h-full rounded-full bg-libre transition-[width] duration-300" style={{ width: `${senal ?? 0}%` }} />
+        <div className="h-full rounded-full bg-libre transition-[width] duration-300" style={{ width: `${salud}%` }} />
       </div>
 
       <div className="mt-3 h-12">
-        <SparklineLatencia puntos={latencias} />
+        <SparklineCadencia puntos={cadencia} />
       </div>
 
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-[13px]">
         <div>
-          <dt className="text-tinta-suave">Latencia</dt>
-          <dd className="font-medium tabular-nums">{ms(ultimaLatencia)}</dd>
+          <dt className="text-tinta-suave">Última lectura</dt>
+          <dd className="font-medium">{lectura ? haceCuanto(lectura.creadoEn) : '—'}</dd>
         </div>
         <div>
-          <dt className="text-tinta-suave">Mensajes/s</dt>
-          <dd className="font-medium tabular-nums">{msgPorSeg}</dd>
+          <dt className="text-tinta-suave">Cadencia esperada</dt>
+          <dd className="font-medium tabular-nums">{ESPERADO_MSG_S} msg/s</dd>
         </div>
         <div>
           <dt className="text-tinta-suave">WebSocket</dt>
@@ -132,8 +131,8 @@ export function TarjetaConectividad({ pctPerdidas }: { pctPerdidas: number | nul
           </dd>
         </div>
         <div>
-          <dt className="text-tinta-suave">Lecturas perdidas</dt>
-          <dd className="font-medium tabular-nums">{pctPerdidas === null ? '—' : `${pctPerdidas} %`}</dd>
+          <dt className="text-tinta-suave">Firmware</dt>
+          <dd className="font-medium">{estadoRobot?.versionFirmware ?? '—'}</dd>
         </div>
       </dl>
     </Tarjeta>

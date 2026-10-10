@@ -7,13 +7,24 @@ WIFI_CLAVE = "CLAVE_DE_TU_WIFI"
 
 MQTT_SERVIDOR = "192.168.1.100"
 MQTT_PUERTO = 1883
-MQTT_USUARIO = ""
-MQTT_CLAVE = ""
-MQTT_CLIENTE_ID = "robot-esp32-01"
 
-TOPIC_TELEMETRIA = b"robot/01/telemetria"
-TOPIC_ESTADO = b"robot/01/estado"
-TOPIC_COMANDO = b"robot/01/comando"
+# Identificador del robot. Es a la vez:
+#   - la fila `dispositivos.id` de la base de datos,
+#   - el usuario MQTT del robot (su clave es el token que da el dashboard),
+#   - el prefijo de sus topicos: roomba/{ROBOT_ID}/...
+# La ACL de Mosquitto solo le deja hablar bajo ese prefijo, asi que tiene que coincidir
+# exactamente con el id que muestra el dashboard al dar de alta el robot.
+ROBOT_ID = "roomba-sala"
+MQTT_USUARIO = ROBOT_ID
+MQTT_CLAVE = "SalaDemoToken0123456789abcdefgh"
+MQTT_CLIENTE_ID = ROBOT_ID
+
+TOPIC_TELEMETRIA = "roomba/{0}/telemetria".format(ROBOT_ID).encode()
+TOPIC_ESTADO = "roomba/{0}/estado".format(ROBOT_ID).encode()
+TOPIC_CONFIG = "roomba/{0}/config".format(ROBOT_ID).encode()
+
+# Version que el robot anuncia al conectar; el dashboard la muestra en Conectividad.
+VERSION_FIRMWARE = "1.2.0"
 
 # MAC STA del ESP32 que enviará las órdenes ESP-NOW.
 MAC_MANDO = b"\xaa\xbb\xcc\xdd\xee\xff"

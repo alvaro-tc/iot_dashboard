@@ -1,6 +1,6 @@
 // POST /api/ingesta — camino alternativo al MQTT.
 //
-// El firmware con MODO_ENVIO = "rest" manda aquí lotes de lecturas por HTTP cada segundo,
+// Un firmware que no pueda usar MQTT manda aquí lotes de lecturas por HTTP cada segundo,
 // sin pasar por el broker. Es más lento, no recibe comandos y no detecta la desconexión,
 // pero demuestra la inserción por API REST y sirve si en una red no se puede usar MQTT.
 //
@@ -34,7 +34,7 @@ async function hashDe(dispositivoId: string): Promise<string | null> {
   if (enCache && enCache.expira > Date.now()) return enCache.hash;
 
   const { rows } = await pool.query<{ token_hash: string }>(
-    'SELECT token_hash FROM dispositivos WHERE id = $1 AND NOT is_revoked',
+    'SELECT token_hash FROM dispositivos WHERE id = $1 AND NOT revocado',
     [dispositivoId],
   );
   if (!rows[0]) {
@@ -57,10 +57,8 @@ ingestaRouter.post('/ingesta', async (req, res) => {
   }
 
   // Mismo camino que el puente MQTT: emitir por WebSocket primero, persistir después.
-  let aceptadas = 0;
   for (const lectura of cuerpo.lecturas) {
-    const r = await procesarTelemetria(cuerpo.dispositivoId, lectura, Date.now());
-    if (r) aceptadas++;
+    await procesarTelemetria(cuerpo.dispositivoId, lectura, Date.now());
   }
-  res.status(202).json({ recibidas: cuerpo.lecturas.length, aceptadas });
+  res.status(202).json({ recibidas: cuerpo.lecturas.length });
 });

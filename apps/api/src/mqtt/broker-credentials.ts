@@ -64,8 +64,8 @@ async function writePasswd(map: Map<string, string>): Promise<void> {
 
 async function writeAcl(): Promise<void> {
   const { rows } = await pool.query<{ id: string }>(
-    `SELECT d.id FROM dispositivos d JOIN users u ON u.id = d.user_id
-     WHERE NOT d.is_revoked AND u.is_active ORDER BY d.id`,
+    `SELECT d.id FROM dispositivos d JOIN usuarios u ON u.id = d.usuario_id
+     WHERE NOT d.revocado AND u.activo ORDER BY d.id`,
   );
   let acl = '# Generado por apps/api (broker-credentials.ts). No editar a mano.\n\n';
   acl += `user ${env.MQTT_ADMIN_USER}\ntopic readwrite ${PREFIJO}/#\n`;
@@ -120,7 +120,7 @@ export function syncBroker(): Promise<void> {
     if (!current || !verifyPassword(current, env.MQTT_ADMIN_PASS)) {
       map.set(env.MQTT_ADMIN_USER, hashPassword(env.MQTT_ADMIN_PASS));
     }
-    const { rows } = await pool.query<{ id: string }>('SELECT id FROM dispositivos WHERE NOT is_revoked');
+    const { rows } = await pool.query<{ id: string }>('SELECT id FROM dispositivos WHERE NOT revocado');
     const valid = new Set(rows.map((r) => r.id));
     for (const user of [...map.keys()]) {
       if (user !== env.MQTT_ADMIN_USER && !valid.has(user)) map.delete(user);

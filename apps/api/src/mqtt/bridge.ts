@@ -7,28 +7,20 @@
 //
 // Reglas:
 //   - Nada que llegue por MQTT puede tumbar el proceso: todo error se loguea y se descarta.
-//   - Los mensajes de un mismo robot se procesan en orden de llegada (una cola por robot).
-//     Procesándolos en paralelo, la lectura 6 podría confirmarse antes que la 5 y la 5
-//     parecería un reinicio de sesión, partiendo la sesión en dos.
+//   - Los mensajes de un mismo robot se procesan en orden de llegada (una cola por robot):
+//     en paralelo, una lectura posterior podría guardarse antes que la anterior.
 //   - Reconexión con espera exponencial: 1 s, 2 s, 4 s… hasta 30 s; vuelve a 1 s al conectar.
 import { PREFIJO, parseTopico } from '@iot/shared';
 import mqtt from 'mqtt';
 import { z } from 'zod';
-import { recibirAck } from '../comandos.ts';
 import { env } from '../env.ts';
 import { marcarPresencia } from '../presencia.ts';
-import { procesarTelemetria, registrarEvento, telemetriaSchema } from '../telemetria.ts';
+import { procesarTelemetria, telemetriaSchema } from '../telemetria.ts';
 
 const MIN_ESPERA = 1_000;
 const MAX_ESPERA = 30_000;
 
 const estadoSchema = z.object({ en_linea: z.boolean(), firmware: z.string().max(32).optional() });
-const eventoSchema = z.object({
-  tipo: z.enum(['obstaculo', 'atascado', 'bateria_baja', 'conexion', 'desconexion', 'cambio_modo']),
-  sensor: z.enum(['izq', 'centro', 'der']).nullish(),
-  distancia_cm: z.number().nullish(),
-  mensaje: z.string().max(200).default(''),
-});
 
 let client: mqtt.MqttClient | null = null;
 export const getMqtt = () => client;
@@ -57,36 +49,14 @@ async function manejar(dispositivoId: string, sufijo: string, json: unknown): Pr
       await procesarTelemetria(dispositivoId, p.data);
       return;
     }
-    case 'telemetria/lote': {
-      // Lecturas diferidas de un corte de red: pueden venir repetidas, el índice único las filtra.
-      if (!Array.isArray(json)) throw new Error('el lote no es un arreglo');
-      for (const item of json.slice(0, 500)) {
-        const p = telemetriaSchema.safeParse(item);
-        if (p.success) await procesarTelemetria(dispositivoId, p.data, p.data.t);
-      }
-      return;
-    }
     case 'estado': {
       const p = estadoSchema.safeParse(json);
       if (!p.success) throw new Error('estado inválido');
       await marcarPresencia(dispositivoId, p.data.en_linea, p.data.firmware ?? null);
       return;
     }
-    case 'evento': {
-      const p = eventoSchema.safeParse(json);
-      if (!p.success) throw new Error('evento inválido');
-      registrarEvento(dispositivoId, null, p.data.tipo, p.data.mensaje, {
-        sensor: p.data.sensor ?? null,
-        distanciaCm: p.data.distancia_cm ?? null,
-      });
-      return;
-    }
-    case 'cmd/ack': {
-      recibirAck(dispositivoId, (json as { id?: unknown })?.id);
-      return;
-    }
     default:
-      return; // `cmd` y `config` los publica el backend; su eco se ignora
+      return; // `config` lo publica el backend; su eco se ignora
   }
 }
 
@@ -119,7 +89,7 @@ export function startBridge(): mqtt.MqttClient {
     const parsed = parseTopico(topic);
     if (!parsed) return;
     const { dispositivoId, sufijo } = parsed;
-    if (sufijo === 'cmd' || sufijo === 'config') return; // publicados por el backend
+    if (sufijo === 'config') return; // lo publica el backend
 
     let json: unknown;
     try {
