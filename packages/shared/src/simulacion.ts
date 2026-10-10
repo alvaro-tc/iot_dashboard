@@ -146,8 +146,11 @@ export class RobotSimulado {
       // Pegado a la pared el HC-SR04 no resuelve por debajo de 2 cm, pero sigue habiendo
       // pared: devolver null aquí haría que el robot la leyera como camino libre.
       if (d < DIST_MIN_CM) return DIST_MIN_CM;
-      // Ruido de ±1 cm.
-      return Math.max(DIST_MIN_CM, Math.round((d + (this.rnd() - 0.5) * 2) * 10) / 10);
+      // Ruido de ±1 cm, acotado al rango del sensor: el ruido se suma DESPUÉS de comprobar
+      // el alcance, así que sin recortar aquí una medida de 399.8 cm sale como 400.3 y se
+      // pasa del rango que acepta la columna (CHECK ... BETWEEN 0 AND 400).
+      const conRuido = Math.round((d + (this.rnd() - 0.5) * 2) * 10) / 10;
+      return Math.min(DIST_MAX_CM, Math.max(DIST_MIN_CM, conRuido));
     };
     return { izquierdo: medir(izquierdo), central: medir(central), derecho: medir(derecho) };
   }

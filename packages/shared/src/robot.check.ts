@@ -73,3 +73,35 @@ console.log('shared: umbrales, batería y movimiento OK');
 
   console.log(`simulación: ${Math.round(r.distanciaRecorridaCm)} cm recorridos, ${r.evasiones} evasiones OK`);
 }
+
+// --- Rango de las distancias: lo que acepta la columna `lecturas` ---
+//
+// El CHECK de la tabla exige 0..400 cm, y el ruido de +-1 cm se suma DESPUES de comprobar el
+// alcance del sensor: sin recortarlo, una medida de 399.8 cm se publica como 400.3 y el
+// INSERT del seed falla a mitad. Hay que mirar TODAS las lecturas, no una muestra, y con la
+// misma habitacion (500x400) y las mismas semillas (id * 101) que usa db:reset: en una
+// habitacion mas pequena ninguna pared cae cerca de los 400 cm y el caso no aparece nunca.
+{
+  const { RobotSimulado } = await import('./simulacion.ts');
+  const { CONFIG_POR_DEFECTO } = await import('./robot.ts');
+  let maxima = 0;
+
+  for (let sesion = 1; sesion <= 7; sesion++) {
+    const r = new RobotSimulado({ ...CONFIG_POR_DEFECTO }, { semilla: sesion * 101 });
+    r.reiniciar();
+    for (let i = 0; i < 4200; i++) {
+      r.paso(50); // 35 min de sesion, como la mas larga del seed
+      const { izquierdo, central, derecho } = r.telemetria().distancias_cm;
+      for (const d of [izquierdo, central, derecho]) {
+        if (d === null) continue;
+        maxima = Math.max(maxima, d);
+        assert.ok(
+          d >= DIST_MIN_CM && d <= DIST_MAX_CM,
+          `distancia fuera de 0..${DIST_MAX_CM} cm (sesion ${sesion}): ${d}`,
+        );
+      }
+    }
+  }
+
+  console.log(`distancias: todas dentro de 0..${DIST_MAX_CM} cm (maxima vista ${maxima})`);
+}
