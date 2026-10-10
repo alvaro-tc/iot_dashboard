@@ -26,9 +26,7 @@
 // sus controles de esquina: lápiz para su tamaño y cruz para quitarlo.
 import React, { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LayoutGrid, Pencil, Plus, RotateCcw, X } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
-import { api } from '../lib/api.ts';
 import {
   ALTO_FILA,
   ALTO_FILA_MIN,
@@ -37,24 +35,28 @@ import {
   ANCHO_LATERAL,
   ANCHOS,
   COLUMNAS,
+  esContador,
   FILAS,
   MARGEN,
   MINIATURA,
+  POR_DEFECTO_VISIBLES,
   TARJETAS_PANEL,
   TEMAS_RADAR,
   usePanelTarjetas,
   type IdTarjeta,
 } from '../lib/panel.tsx';
 import { useRobots } from '../lib/robots.tsx';
+import { METRICAS, metrica, type IdMetrica } from '../lib/metricas.ts';
 import { useSocket } from '../lib/socket.tsx';
-import type { Resumen } from '../lib/types.ts';
 import { DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
 import { TarjetaBateria } from '../components/TarjetaBateria.tsx';
 import { TarjetaConectividad } from '../components/TarjetaConectividad.tsx';
+import { TarjetaContador, useResumen } from '../components/TarjetaContador.tsx';
 import { TarjetaDistancias } from '../components/TarjetaDistancias.tsx';
 import { TarjetaEstado } from '../components/TarjetaEstado.tsx';
 import { TarjetaEvasion } from '../components/TarjetaEvasion.tsx';
 import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
+import { TarjetaMotor } from '../components/TarjetaMotor.tsx';
 import { TarjetaSesiones, type EstadoRepeticion } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
 
@@ -125,14 +127,15 @@ function Miniatura({ children }: { children: ReactNode }) {
  */
 function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
   const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles } = usePanelTarjetas();
-  const fuera = TARJETAS_PANEL.length - visibles.length;
+  const deFabrica =
+    visibles.length === POR_DEFECTO_VISIBLES.length && POR_DEFECTO_VISIBLES.every((id) => visibles.includes(id));
   return (
     <>
       <p className="tarjeta-sub mb-3">
         Toca un widget para añadirlo o quitarlo. En el panel, arrástralos para colocarlos y tira del borde para
         cambiar su tamaño. Se guarda en este navegador.
       </p>
-      {/* Dos columnas con miniatura: los siete widgets se ven de un vistazo, sin scrollear. */}
+      {/* Dos columnas con miniatura: entran el doble de widgets por pantalla de cajón. */}
       <ul className={vista ? 'grid grid-cols-2 gap-2' : 'space-y-1'}>
         {TARJETAS_PANEL.map(({ id, texto, Icono }) => (
           <li key={id}>
@@ -163,8 +166,8 @@ function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
       </ul>
       {!visibles.length && <p className="mt-3 text-[13px] text-precaucion">Sin widgets el panel queda vacío.</p>}
       <div className="mt-5 flex gap-2">
-        <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={!fuera}>
-          Añadir todos
+        <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={deFabrica}>
+          De fábrica
         </button>
         <button
           type="button"
@@ -182,8 +185,10 @@ function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
 
 /** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
 function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
-  const { layout, fijarTamano, temaRadar, fijarTemaRadar } = usePanelTarjetas();
-  const { texto, min } = TARJETAS_PANEL.find((t) => t.id === id)!;
+  const { layout, fijarTamano, temaRadar, fijarTemaRadar, metricas, fijarMetrica } = usePanelTarjetas();
+  const { min } = TARJETAS_PANEL.find((t) => t.id === id)!;
+  // El contador se llama por lo que cuenta, no "Contador 3": es su título en el panel.
+  const texto = esContador(id) ? `${metrica(metricas[id]).texto} (${metrica(metricas[id]).alcance})` : TARJETAS_PANEL.find((t) => t.id === id)!.texto;
   const caja = layout.find((l) => l.i === id);
   const w = caja?.w ?? min.w;
   const h = caja?.h ?? min.h;
@@ -215,6 +220,31 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
             opciones={ALTOS.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
           />
         </div>
+        {/* Opción propia del contador: qué cuenta. Son ocho métricas, así que un desplegable y
+            no un segmentado: ocho pastillas no caben en el modal. */}
+        {esContador(id) && (
+          <div>
+            <label className="etiqueta" htmlFor="contador-metrica">
+              Qué cuenta
+            </label>
+            <select
+              id="contador-metrica"
+              className="campo cursor-pointer"
+              value={metricas[id]}
+              onChange={(e) => fijarMetrica(id, e.target.value as IdMetrica)}
+            >
+              {METRICAS.map((m) => (
+                <option key={m.valor} value={m.valor}>
+                  {m.alcance}: {m.texto}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-[12px] text-tinta-suave">
+              Puedes añadir varios contadores y poner una métrica distinta en cada uno.
+            </p>
+          </div>
+        )}
+
         {/* Opción propia del radar: con qué criterio se colorean los tres sensores. */}
         {id === 'radar' && (
           <div>
@@ -244,7 +274,6 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
 
 export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
-  const { robotId } = useSocket();
   const { layout, guardarLayout, alternar } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
   const marcoRef = useRef<HTMLDivElement>(null);
@@ -255,12 +284,7 @@ export function Panel() {
   const [widget, setWidget] = useState<IdTarjeta | null>(null);
   const [repeticion, setRepeticion] = useState<EstadoRepeticion | null>(null);
 
-  const { data: resumen } = useQuery<Resumen>({
-    queryKey: ['resumen', robotId],
-    queryFn: () => api(`/api/dispositivos/${robotId}/resumen`),
-    enabled: !!robotId,
-    refetchInterval: 10_000,
-  });
+  const { data: resumen } = useResumen();
 
   // En una sola columna no hay nada que reordenar ni forma de que todo quepa sin scroll: los
   // tiradores solo estorbarían. Se decide con el ancho de la FILA, que no cambia al abrir el
@@ -339,6 +363,21 @@ export function Panel() {
         return <TarjetaBateria />;
       case 'evasion':
         return <TarjetaEvasion />;
+      case 'motor-izq':
+        return <TarjetaMotor motor="izq" />;
+      case 'motor-der':
+        return <TarjetaMotor motor="der" />;
+      case 'dist-izq':
+        return <TarjetaDistancias solo="izq" />;
+      case 'dist-centro':
+        return <TarjetaDistancias solo="centro" />;
+      case 'dist-der':
+        return <TarjetaDistancias solo="der" />;
+      case 'contador-1':
+      case 'contador-2':
+      case 'contador-3':
+      case 'contador-4':
+        return <TarjetaContador id={id} />;
     }
   };
 

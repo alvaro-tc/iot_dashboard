@@ -1,9 +1,14 @@
 // "Historial de distancias": equivale a la tarjeta de Bedroom Light de la referencia.
 // Tres series en ventana deslizante alimentadas por WebSocket, con líneas de umbral.
 // Es de solo vista: siempre en vivo, ventana fija de 5 minutos.
+//
+// Con `solo` dibuja un único sensor: es el mismo componente, y así el panel puede tener una
+// gráfica por sensor (tres widgets) además de la de los tres juntos. Los datos y los umbrales
+// son los mismos; cambia qué series se pintan.
 import { useEffect, useRef } from 'react';
-import { CONFIG_POR_DEFECTO, type Lectura, type Movimiento } from '@iot/shared';
+import { CONFIG_POR_DEFECTO, SENSORES, type Lectura, type Movimiento, type Sensor } from '@iot/shared';
 import { Chart } from '../lib/chart.ts';
+import { NOMBRE_SENSOR } from '../lib/formato.ts';
 import { useSocket, useTelemetria } from '../lib/socket.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 import { Tarjeta } from './ui.tsx';
@@ -46,7 +51,7 @@ function pluginFranja(tramos: () => { x: number; e: Movimiento }[]) {
   };
 }
 
-export function TarjetaDistancias() {
+export function TarjetaDistancias({ solo }: { solo?: Sensor } = {}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
@@ -115,15 +120,15 @@ export function TarjetaDistancias() {
       spanGaps: false,
     });
 
+    const todas = [
+      serie('Izquierdo', '#60a5fa', 'izq'),
+      serie('Central', colores.acento, 'centro'),
+      serie('Derecho', '#a78bfa', 'der'),
+    ];
+
     const chart = new Chart(canvas, {
       type: 'line',
-      data: {
-        datasets: [
-          serie('Izquierdo', '#60a5fa', 'izq'),
-          serie('Central', colores.acento, 'centro'),
-          serie('Derecho', '#a78bfa', 'der'),
-        ],
-      },
+      data: { datasets: solo ? [todas[SENSORES.indexOf(solo)]] : todas },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -133,7 +138,7 @@ export function TarjetaDistancias() {
         layout: { padding: { bottom: 12 } }, // sitio para la franja de estados
         plugins: {
           legend: {
-            display: true,
+            display: !solo,
             position: 'bottom',
             labels: { color: colores.tintaSuave, boxWidth: 10, boxHeight: 10, usePointStyle: true },
           },
@@ -193,10 +198,13 @@ export function TarjetaDistancias() {
       chart.destroy();
       chartRef.current = null;
     };
-  }, [colores.tema, cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [colores.tema, cfg.distanciaEvasionCm, cfg.distanciaPrecaucionCm, solo]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <Tarjeta titulo="Historial de distancias" subtitulo="Últimos 5 minutos">
+    <Tarjeta
+      titulo={solo ? `Distancia sensor ${NOMBRE_SENSOR[solo]}` : 'Historial de distancias'}
+      subtitulo="Últimos 5 minutos"
+    >
       <div className="h-full">
         <canvas ref={canvasRef} />
       </div>

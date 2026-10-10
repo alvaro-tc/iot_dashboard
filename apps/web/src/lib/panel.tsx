@@ -9,12 +9,16 @@ import {
   Activity,
   BatteryCharging,
   CalendarClock,
+  Cog,
   Gauge,
   Bot,
+  Hash,
   Map,
   Radar,
+  Ruler,
   Wifi,
 } from 'lucide-react';
+import { metrica, type IdMetrica } from './metricas.ts';
 
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
 export const COLUMNAS = 24;
@@ -58,7 +62,28 @@ export const TARJETAS_PANEL = [
   { id: 'distancias', texto: 'Distancias', Icono: Activity, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'bateria', texto: 'Batería', Icono: BatteryCharging, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'evasion', texto: 'Evasión', Icono: Gauge, caja: { x: 18, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  // Los de abajo no salen de fábrica (POR_DEFECTO_VISIBLES): con los dieciséis a la vez no
+  // cabe nada en FILAS filas. Se añaden desde el cajón de widgets.
+  { id: 'motor-izq', texto: 'Uso motor izquierdo', Icono: Cog, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'motor-der', texto: 'Uso motor derecho', Icono: Cog, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'dist-izq', texto: 'Distancia izquierda', Icono: Ruler, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'dist-centro', texto: 'Distancia central', Icono: Ruler, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'dist-der', texto: 'Distancia derecha', Icono: Ruler, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  { id: 'contador-1', texto: 'Contador 1', Icono: Hash, caja: { x: 0, y: 6, w: 5, h: 3 }, min: { w: 3, h: 2 } },
+  { id: 'contador-2', texto: 'Contador 2', Icono: Hash, caja: { x: 5, y: 6, w: 5, h: 3 }, min: { w: 3, h: 2 } },
+  { id: 'contador-3', texto: 'Contador 3', Icono: Hash, caja: { x: 10, y: 6, w: 5, h: 3 }, min: { w: 3, h: 2 } },
+  { id: 'contador-4', texto: 'Contador 4', Icono: Hash, caja: { x: 15, y: 6, w: 5, h: 3 }, min: { w: 3, h: 2 } },
 ] as const;
+
+/** Qué cuenta cada contador de fábrica: cuatro métricas distintas, no cuatro veces la misma. */
+const METRICA_POR_DEFECTO: Record<string, IdMetrica> = {
+  'contador-1': 'motores-hoy',
+  'contador-2': 'uso-hoy',
+  'contador-3': 'distancia-hoy',
+  'contador-4': 'evasiones-hoy',
+};
+
+export const esContador = (id: IdTarjeta) => id.startsWith('contador-');
 
 /** Presets del diálogo de edición de un widget: columnas y filas, acotados por su mínimo. */
 export const ANCHOS = [
@@ -100,19 +125,27 @@ interface Caja {
 const CLAVE = 'panel-tarjetas-v2';
 const CLAVE_CAJAS = 'panel-disposicion-v3';
 const CLAVE_RADAR = 'panel-radar-tema';
+const CLAVE_METRICAS = 'panel-contadores';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
+/**
+ * Lo que ve quien entra por primera vez: las ocho tarjetas originales. Los motores, las
+ * distancias por sensor y los contadores existen en el cajón, pero juntos no caben en el
+ * tablero, así que cada cual añade los que quiera. Quien ya tenía preferencias guardadas no
+ * nota nada: `leerVisibles` descarta los ids que no estén en su lista.
+ */
+export const POR_DEFECTO_VISIBLES = TODAS.slice(0, 8);
 const POR_DEFECTO = Object.fromEntries(TARJETAS_PANEL.map((t) => [t.id, t.caja])) as Record<IdTarjeta, Caja>;
 
 /** Ignora ids desconocidos: si una tarjeta desaparece del código, la preferencia no rompe. */
 function leerVisibles(): IdTarjeta[] {
   try {
     const guardado = localStorage.getItem(CLAVE);
-    if (!guardado) return TODAS;
+    if (!guardado) return POR_DEFECTO_VISIBLES;
     const ids = JSON.parse(guardado) as unknown;
-    if (!Array.isArray(ids)) return TODAS;
+    if (!Array.isArray(ids)) return POR_DEFECTO_VISIBLES;
     return TODAS.filter((id) => ids.includes(id));
   } catch {
-    return TODAS;
+    return POR_DEFECTO_VISIBLES;
   }
 }
 
@@ -145,11 +178,25 @@ function leerTemaRadar(): TemaRadar {
   }
 }
 
+/** Igual: una métrica que ya no exista en el catálogo cae en la de fábrica de ese contador. */
+function leerMetricas(): Record<string, IdMetrica> {
+  const porDefecto = { ...METRICA_POR_DEFECTO };
+  try {
+    const crudo = JSON.parse(localStorage.getItem(CLAVE_METRICAS) ?? '{}') as Record<string, string>;
+    for (const id of Object.keys(porDefecto)) {
+      if (crudo?.[id]) porDefecto[id] = metrica(crudo[id] as IdMetrica).valor;
+    }
+    return porDefecto;
+  } catch {
+    return porDefecto;
+  }
+}
+
 interface ValorPanel {
   visibles: IdTarjeta[];
   ve: (id: IdTarjeta) => boolean;
   alternar: (id: IdTarjeta) => void;
-  /** Vuelve a mostrar todas las tarjetas, sin tocar la disposición. */
+  /** Vuelve al juego de tarjetas de fábrica, sin tocar la disposición. */
   restablecer: () => void;
   /** Grilla de las tarjetas visibles, lista para react-grid-layout. */
   layout: Layout;
@@ -162,6 +209,9 @@ interface ValorPanel {
   /** Paleta del radar. La lee el propio radar, también el de /mapa: es una sola preferencia. */
   temaRadar: TemaRadar;
   fijarTemaRadar: (t: TemaRadar) => void;
+  /** Qué cuenta cada widget contador, por su id. */
+  metricas: Record<string, IdMetrica>;
+  fijarMetrica: (id: IdTarjeta, m: IdMetrica) => void;
 }
 
 const Contexto = createContext<ValorPanel>({
@@ -176,6 +226,8 @@ const Contexto = createContext<ValorPanel>({
   disposicionTocada: false,
   temaRadar: 'estado',
   fijarTemaRadar: () => {},
+  metricas: METRICA_POR_DEFECTO,
+  fijarMetrica: () => {},
 });
 export const usePanelTarjetas = () => useContext(Contexto);
 
@@ -183,23 +235,26 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   const [visibles, setVisibles] = useState<IdTarjeta[]>(leerVisibles);
   const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(leerCajas);
   const [temaRadar, setTemaRadar] = useState<TemaRadar>(leerTemaRadar);
+  const [metricas, setMetricas] = useState<Record<string, IdMetrica>>(leerMetricas);
 
   useEffect(() => {
     try {
       localStorage.setItem(CLAVE, JSON.stringify(visibles));
       localStorage.setItem(CLAVE_CAJAS, JSON.stringify(cajas));
       localStorage.setItem(CLAVE_RADAR, temaRadar);
+      localStorage.setItem(CLAVE_METRICAS, JSON.stringify(metricas));
     } catch {
       /* navegación privada: la preferencia solo dura la sesión */
     }
-  }, [visibles, cajas, temaRadar]);
+  }, [visibles, cajas, temaRadar, metricas]);
 
   const alternar = useCallback(
     (id: IdTarjeta) =>
       setVisibles((xs) => (xs.includes(id) ? xs.filter((x) => x !== id) : TODAS.filter((t) => t === id || xs.includes(t)))),
     [],
   );
-  const restablecer = useCallback(() => setVisibles(TODAS), []);
+  const restablecer = useCallback(() => setVisibles(POR_DEFECTO_VISIBLES), []);
+  const fijarMetrica = useCallback((id: IdTarjeta, m: IdMetrica) => setMetricas((prev) => ({ ...prev, [id]: m })), []);
   const restablecerDisposicion = useCallback(() => setCajas({}), []);
 
   const fijarTamano = useCallback((id: IdTarjeta, w: number, h: number) => {
@@ -257,6 +312,8 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
         disposicionTocada: Object.keys(cajas).length > 0,
         temaRadar,
         fijarTemaRadar: setTemaRadar,
+        metricas,
+        fijarMetrica,
       }}
     >
       {children}
