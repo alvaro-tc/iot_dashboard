@@ -37,8 +37,10 @@ import {
   COLUMNAS,
   esContador,
   FILAS,
+  infoTarjeta,
   MARGEN,
   MINIATURA,
+  PLANTILLA_CONTADOR,
   POR_DEFECTO_VISIBLES,
   TARJETAS_PANEL,
   TEMAS_RADAR,
@@ -59,6 +61,9 @@ import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { TarjetaMotor } from '../components/TarjetaMotor.tsx';
 import { TarjetaSesiones, type EstadoRepeticion } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
+
+/** Id de la miniatura del contador: no está en el tablero, así que sale con la métrica de fábrica. */
+const PREVIO_CONTADOR = 'contador-previo';
 
 /** Alto libre desde el elemento hasta el borde inferior de la ventana; 0 si no se ajusta. */
 function useAltoLibre(ref: React.RefObject<HTMLElement | null>, activo: boolean) {
@@ -125,8 +130,10 @@ function Miniatura({ children }: { children: ReactNode }) {
  * panel. Es el mismo contenido en el lateral (escritorio) y en el modal (pantalla estrecha,
  * donde la grilla es de una columna, no hay nada que colocar y la miniatura no cabe).
  */
-function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
-  const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles } = usePanelTarjetas();
+function CajonWidgets({ vista, onEditar }: { vista?: (id: IdTarjeta) => ReactNode; onEditar?: (id: IdTarjeta) => void }) {
+  const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles, anadirContador } =
+    usePanelTarjetas();
+  const contadores = visibles.filter(esContador).length;
   const deFabrica =
     visibles.length === POR_DEFECTO_VISIBLES.length && POR_DEFECTO_VISIBLES.every((id) => visibles.includes(id));
   return (
@@ -163,7 +170,36 @@ function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
             </button>
           </li>
         ))}
+        {/* El contador no se alterna: se añade uno nuevo cada vez, con su propia métrica. El
+            diálogo del nuevo se abre solo, que es donde se elige qué cuenta. */}
+        <li>
+          <button
+            type="button"
+            aria-label="Añadir un contador"
+            className={
+              vista
+                ? 'w-full cursor-pointer rounded-2xl border border-borde p-1.5 text-left transition-colors duration-150 hover:border-acento/40'
+                : 'chip w-full justify-start'
+            }
+            onClick={() => onEditar?.(anadirContador())}
+          >
+            <span className={vista ? 'mb-1.5 flex items-center gap-1.5' : 'flex min-w-0 flex-1 items-center gap-2'}>
+              <span className={`chip-icono shrink-0 ${vista ? 'size-5' : ''}`}>
+                <PLANTILLA_CONTADOR.Icono className={vista ? 'size-3' : 'size-3.5'} />
+              </span>
+              <span className="min-w-0 flex-1 truncate text-left text-[12px] font-medium">
+                {PLANTILLA_CONTADOR.texto}
+                {contadores > 0 && <span className="text-tinta-suave"> ({contadores})</span>}
+              </span>
+              <Plus className="size-3.5 shrink-0" />
+            </span>
+            {vista && <Miniatura>{vista(PREVIO_CONTADOR)}</Miniatura>}
+          </button>
+        </li>
       </ul>
+      <p className="mt-2 text-[12px] text-tinta-suave">
+        Del contador puedes poner varios: cada uno cuenta una cosa distinta, y se elige al editarlo.
+      </p>
       {!visibles.length && <p className="mt-3 text-[13px] text-precaucion">Sin widgets el panel queda vacío.</p>}
       <div className="mt-5 flex gap-2">
         <button type="button" className="btn btn-sm flex-1" onClick={restablecer} disabled={deFabrica}>
@@ -186,9 +222,9 @@ function CajonWidgets({ vista }: { vista?: (id: IdTarjeta) => ReactNode }) {
 /** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
 function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
   const { layout, fijarTamano, temaRadar, fijarTemaRadar, metricas, fijarMetrica } = usePanelTarjetas();
-  const { min } = TARJETAS_PANEL.find((t) => t.id === id)!;
-  // El contador se llama por lo que cuenta, no "Contador 3": es su título en el panel.
-  const texto = esContador(id) ? `${metrica(metricas[id]).texto} (${metrica(metricas[id]).alcance})` : TARJETAS_PANEL.find((t) => t.id === id)!.texto;
+  const { min } = infoTarjeta(id);
+  // El contador se llama por lo que cuenta: es su título en el tablero.
+  const texto = esContador(id) ? metrica(metricas[id]).texto : infoTarjeta(id).texto;
   const caja = layout.find((l) => l.i === id);
   const w = caja?.w ?? min.w;
   const h = caja?.h ?? min.h;
@@ -373,11 +409,9 @@ export function Panel() {
         return <TarjetaDistancias solo="centro" />;
       case 'dist-der':
         return <TarjetaDistancias solo="der" />;
-      case 'contador-1':
-      case 'contador-2':
-      case 'contador-3':
-      case 'contador-4':
-        return <TarjetaContador id={id} />;
+      default:
+        // Contadores: tantos como se añadan, cada uno con su métrica.
+        return esContador(id) ? <TarjetaContador id={id} /> : null;
     }
   };
 
@@ -428,7 +462,7 @@ export function Panel() {
               >
                 {layout.map(({ i }) => {
                   const id = i as IdTarjeta;
-                  const texto = TARJETAS_PANEL.find((t) => t.id === id)?.texto ?? id;
+                  const texto = esContador(id) ? PLANTILLA_CONTADOR.texto : infoTarjeta(id).texto;
                   return (
                     <div key={i} className="widget-panel">
                       {tarjeta(id)}
@@ -469,7 +503,7 @@ export function Panel() {
           <aside aria-label="Widgets" className="cajon-widgets" style={{ width: ANCHO_LATERAL }}>
             <h2 className="tarjeta-titulo mb-1 shrink-0">Widgets</h2>
             <div className="-mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
-              <CajonWidgets vista={tarjeta} />
+              <CajonWidgets vista={tarjeta} onEditar={setWidget} />
             </div>
           </aside>
         )}
@@ -503,7 +537,7 @@ export function Panel() {
       {editando && !puedeColocar && (
         <Modal etiqueta="Widgets" ancho="max-w-sm" onCerrar={() => setEditando(false)}>
           <h2 className="tarjeta-titulo mb-1">Widgets</h2>
-          <CajonWidgets />
+          <CajonWidgets onEditar={setWidget} />
           <button type="button" className="btn btn-acento mt-3 w-full" onClick={() => setEditando(false)}>
             Listo
           </button>

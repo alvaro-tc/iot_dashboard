@@ -58,6 +58,8 @@ export function segundosMotores(resumen: Resumen, cfg: Configuracion): number {
 interface Contexto {
   resumen: Resumen;
   cfg: Configuracion;
+  /** Telemetria que el socket tiene en memoria: de aqui salen las metricas por motor. */
+  lecturas: Lectura[];
   /** Ahora, en ms. Parámetro y no `Date.now()` para poder comprobar la duración de la sesión. */
   ahora: number;
 }
@@ -73,6 +75,20 @@ export const METRICAS = [
     calc: ({ resumen, cfg }: Contexto) => duracion(segundosMotores(resumen, cfg)),
   },
   { valor: 'uso-hoy', texto: 'Tiempo de uso', alcance: 'Hoy', calc: ({ resumen }: Contexto) => duracion(resumen.segundosHoy) },
+  // El servidor no guarda el PWM por rueda, asi que el tiempo de cada motor por separado solo
+  // se puede medir sobre la telemetria en memoria. Es el total de la grafica de ese motor.
+  {
+    valor: 'motor-izq',
+    texto: 'Motor izquierdo en marcha',
+    alcance: 'Ventana en vivo',
+    calc: ({ lecturas }: Contexto) => duracion(usoAcumulado(lecturas, 'izq').at(-1)?.y ?? 0),
+  },
+  {
+    valor: 'motor-der',
+    texto: 'Motor derecho en marcha',
+    alcance: 'Ventana en vivo',
+    calc: ({ lecturas }: Contexto) => duracion(usoAcumulado(lecturas, 'der').at(-1)?.y ?? 0),
+  },
   {
     valor: 'distancia-hoy',
     texto: 'Distancia recorrida',

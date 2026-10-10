@@ -9,7 +9,7 @@ import { CONFIG_POR_DEFECTO } from '@iot/shared';
 import { api } from '../lib/api.ts';
 import { metrica } from '../lib/metricas.ts';
 import { usePanelTarjetas, type IdTarjeta } from '../lib/panel.tsx';
-import { useSocket } from '../lib/socket.tsx';
+import { useSocket, useUltimaLectura } from '../lib/socket.tsx';
 import type { Resumen } from '../lib/types.ts';
 import { Tarjeta } from './ui.tsx';
 
@@ -27,11 +27,16 @@ export function useResumen() {
 
 export function TarjetaContador({ id }: { id: IdTarjeta }) {
   const { metricas } = usePanelTarjetas();
-  const { config } = useSocket();
+  const { config, historial } = useSocket();
   const { data: resumen } = useResumen();
+  // El resumen del servidor llega cada 10 s, pero las metricas en vivo (motores, duracion de
+  // la sesion) cambian antes: este 1 Hz es lo que las mantiene al dia.
+  useUltimaLectura(1);
   const m = metrica(metricas[id]);
   // Sin resumen todavía: el hueco se rellena con un guion, no con un cero que parecería real.
-  const texto = resumen ? m.calc({ resumen, cfg: config ?? CONFIG_POR_DEFECTO, ahora: Date.now() }) : '—';
+  const texto = resumen
+    ? m.calc({ resumen, cfg: config ?? CONFIG_POR_DEFECTO, lecturas: historial(), ahora: Date.now() })
+    : '—';
 
   return (
     <Tarjeta titulo={m.texto} subtitulo={m.alcance}>

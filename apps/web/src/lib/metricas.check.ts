@@ -54,6 +54,7 @@ assert.equal(segundosMotores(resumen(null), cfg), 0);
   const ctx = {
     resumen: { segundosHoy: 0, distanciaHoyCm: 0, evasionesIzq: 0, evasionesCentro: 0, evasionesDer: 0, movimientos: null, sesion: null },
     cfg,
+    lecturas: [],
     ahora: 0,
   } as Parameters<(typeof METRICAS)[number]['calc']>[0];
   for (const m of METRICAS) assert.ok(m.calc(ctx).length > 0, m.valor);
