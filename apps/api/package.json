@@ -9,6 +9,7 @@
     "build": "tsc --noEmit",
     "lint": "tsc --noEmit",
     "db:reset": "tsx db/reset.ts",
+    "db:vistas": "tsx db/vistas.ts",
     "db:seed-admin": "tsx db/seed-admin.ts"
   },
   "dependencies": {

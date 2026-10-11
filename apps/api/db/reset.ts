@@ -16,6 +16,7 @@ try {
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   await c.query(`SET TIME ZONE '${tz.replace(/'/g, '')}'`);
   await c.query(await fs.readFile(path.join(dir, 'schema.sql'), 'utf8'));
+  await c.query(await fs.readFile(path.join(dir, 'vistas.sql'), 'utf8'));
   await c.query(await fs.readFile(path.join(dir, 'seed.sql'), 'utf8'));
 
   const { rows: sesiones } = await c.query<{
