@@ -4,11 +4,11 @@
 import { useEffect, useRef } from 'react';
 import { Chart } from '../lib/chart.ts';
 import { voltios } from '../lib/formato.ts';
-import { useUltimaLectura } from '../lib/socket.tsx';
+import { useSocket, useUltimaLectura } from '../lib/socket.tsx';
 import { useColoresTema } from '../lib/tema.tsx';
 import { Chip, Tarjeta } from './ui.tsx';
 
-function Gauge({ pct, color }: { pct: number; color: string }) {
+function Gauge({ pct, color, conectado }: { pct: number; color: string; conectado: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
   const colores = useColoresTema();
@@ -48,28 +48,42 @@ function Gauge({ pct, color }: { pct: number; color: string }) {
     chart.update();
   }, [pct, color, colores.borde]);
 
-  return <canvas ref={canvasRef} role="img" aria-label={`Batería al ${Math.round(pct)} por ciento`} />;
+  return (
+    <canvas
+      ref={canvasRef}
+      role="img"
+      aria-label={conectado ? `Batería al ${Math.round(pct)} por ciento` : 'Batería sin datos: robot desconectado'}
+    />
+  );
 }
 
 export function TarjetaBateria() {
+  const { estado, estadoRobot } = useSocket();
   const lectura = useUltimaLectura(1);
   const colores = useColoresTema();
 
-  const pct = lectura?.bateriaPorcentaje ?? 0;
-  const color = pct < 20 ? colores.evasion : pct < 50 ? colores.precaucion : colores.libre;
+  const conectado = estado === 'conectado' && !!estadoRobot?.enLinea && lectura?.bateriaPorcentaje != null;
+  const pct = conectado ? lectura!.bateriaPorcentaje : 0;
+  // Rojo cuando queda poca batería, verde cuando está cargada; gris si no hay robot.
+  const color = !conectado ? colores.borde : pct < 20 ? colores.evasion : colores.libre;
 
   return (
-    <Tarjeta titulo="Batería" pie={lectura?.bateriaVoltios != null ? <Chip>{voltios(lectura.bateriaVoltios)}</Chip> : undefined}>
-      <div className="flex h-full min-h-0 items-center justify-center">
+    <Tarjeta
+      titulo="Batería"
+      pie={conectado && lectura?.bateriaVoltios != null ? <Chip>{voltios(lectura.bateriaVoltios)}</Chip> : undefined}
+    >
+      <div className="flex h-full min-h-0 items-center justify-center px-4 py-2 sm:px-6 sm:py-3">
         {/* El semicírculo ocupa 2:1, así que la caja lo es también: el centro del dial cae en
             su borde inferior. El hueco (cutout 72%) ocupa el 72% del radio = 72% de la altura
             de la caja desde abajo; el número se centra dentro de ese hueco. */}
-        <div className="relative aspect-[2/1] w-full max-w-[220px]">
-          <Gauge pct={pct} color={color} />
+        <div className="relative aspect-[2/1] w-full max-w-[180px] sm:max-w-[220px]">
+          <Gauge pct={pct} color={color} conectado={conectado} />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[72%] flex-col items-center justify-center">
-            <p className="text-[32px] leading-none font-bold tabular-nums">
-              {Math.round(pct)}
-              <span className="ml-0.5 text-[15px] font-semibold text-tinta-suave">%</span>
+            <p
+              className={`text-[28px] leading-none font-bold tabular-nums sm:text-[32px] ${conectado ? '' : 'text-tinta-suave'}`}
+            >
+              {conectado ? Math.round(pct) : '—'}
+              {conectado && <span className="ml-0.5 text-[15px] font-semibold text-tinta-suave">%</span>}
             </p>
           </div>
         </div>
