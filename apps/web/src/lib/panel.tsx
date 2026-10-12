@@ -121,17 +121,28 @@ export const TEMAS_RADAR = [
 ] as const;
 export type TemaRadar = (typeof TEMAS_RADAR)[number]['valor'];
 
-/** Cuántas barras a la vez en el widget de barras de distancia. */
+/**
+ * Modo del widget de barras de distancia: `sensores` son las 3 barras en vivo, una por sensor
+ * ultrasónico (fijo a 3: son los sensores que hay). `historial` es una sola, con sus últimas
+ * N lecturas en el tiempo.
+ */
+export const MODOS_BARRAS = [
+  { valor: 'sensores', texto: 'En vivo' },
+  { valor: 'historial', texto: 'Historial' },
+] as const;
+export type ModoBarras = (typeof MODOS_BARRAS)[number]['valor'];
+/** Cuántas barras a la vez en el modo historial. */
 export const BARRAS_N = [
   { valor: 5, texto: '5' },
   { valor: 10, texto: '10' },
   { valor: 20, texto: '20' },
 ] as const;
 export interface ConfigBarras {
+  modo: ModoBarras;
   sensor: Sensor;
   n: number;
 }
-export const BARRAS_POR_DEFECTO: ConfigBarras = { sensor: 'central', n: 10 };
+export const BARRAS_POR_DEFECTO: ConfigBarras = { modo: 'sensores', sensor: 'central', n: 10 };
 
 /**
  * Un id del catálogo, o el de un contador instanciado, que no se puede escribir como literal.
@@ -240,7 +251,8 @@ function leerBarras(): Record<string, ConfigBarras> {
     const validas: Record<string, ConfigBarras> = {};
     for (const [id, c] of Object.entries(crudo ?? {})) {
       if (c && SENSORES.includes(c.sensor as Sensor) && typeof c.n === 'number' && c.n > 0) {
-        validas[id] = { sensor: c.sensor as Sensor, n: c.n };
+        const modo = MODOS_BARRAS.some((m) => m.valor === c.modo) ? (c.modo as ModoBarras) : 'sensores';
+        validas[id] = { modo, sensor: c.sensor as Sensor, n: c.n };
       }
     }
     return validas;

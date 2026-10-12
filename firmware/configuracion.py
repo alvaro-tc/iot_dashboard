@@ -27,7 +27,9 @@ TOPIC_CONFIG = "roomba/{0}/config".format(ROBOT_ID).encode()
 VERSION_FIRMWARE = "1.2.0"
 
 # MAC STA del ESP32 que enviará las órdenes ESP-NOW.
-MAC_MANDO = b"\xaa\xbb\xcc\xdd\xee\xff"
+# El mando la muestra en su pantalla ESP-NOW; pegarla aqui para aceptar ordenes
+# SOLO de ese mando. None = aceptar cualquier remitente (para probar sin la MAC).
+MAC_MANDO = None
 
 # ---------- TB6612FNG ----------
 # Rueda izquierda: PWMA, AIN1, AIN2

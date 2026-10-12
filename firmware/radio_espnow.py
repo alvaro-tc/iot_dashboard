@@ -29,8 +29,8 @@ class ReceptorESPNow:
         if not mensaje:
             return
 
-        # Aceptar órdenes únicamente del mando configurado.
-        if mac != cfg.MAC_MANDO:
+        # Aceptar órdenes únicamente del mando configurado (si se configuró uno).
+        if cfg.MAC_MANDO is not None and mac != cfg.MAC_MANDO:
             return
 
         try:

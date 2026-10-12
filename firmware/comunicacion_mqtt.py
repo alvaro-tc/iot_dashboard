@@ -3,7 +3,6 @@
 
 import json
 import time
-from umqtt.simple import MQTTClient
 import configuracion as cfg
 
 
@@ -15,6 +14,11 @@ class ClienteMQTT:
         self.ultimo_intento_ms = 0
 
     def conectar(self):
+        # Import aqui dentro: umqtt.simple NO viene en el firmware MicroPython base
+        # (instalar con mip.install("umqtt.simple")). Si falta, el ImportError lo
+        # recoge quien llama a conectar() y el robot sigue funcionando sin telemetria.
+        from umqtt.simple import MQTTClient
+
         cliente = MQTTClient(
             client_id=cfg.MQTT_CLIENTE_ID,
             server=cfg.MQTT_SERVIDOR,

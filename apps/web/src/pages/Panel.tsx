@@ -37,6 +37,7 @@ import {
   BARRAS_N,
   BARRAS_POR_DEFECTO,
   COLUMNAS,
+  MODOS_BARRAS,
   esContador,
   FILAS,
   infoTarjeta,
@@ -337,32 +338,51 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
           </div>
         )}
 
-        {/* Opción propia del widget de barras: de qué sensor ultrasónico y cuántas lecturas
-            a la vez. Es lo que lo hace reutilizable para cualquiera de los tres. */}
-        {id === 'barras-distancia' && (
-          <>
-            <div>
-              <span className="etiqueta">Sensor</span>
-              <Segmentado
-                etiqueta="Sensor del widget de barras"
-                valor={(barras[id] ?? BARRAS_POR_DEFECTO).sensor}
-                onCambiar={(v) => fijarBarras(id, { ...(barras[id] ?? BARRAS_POR_DEFECTO), sensor: v })}
-                opciones={SENSORES.map((s) => ({ valor: s, texto: NOMBRE_SENSOR[s] }))}
-              />
-            </div>
-            <div>
-              <span className="etiqueta">Barras a la vez</span>
-              <Segmentado
-                etiqueta="Cantidad de barras"
-                valor={String((barras[id] ?? BARRAS_POR_DEFECTO).n)}
-                onCambiar={(v) =>
-                  fijarBarras(id, { ...(barras[id] ?? BARRAS_POR_DEFECTO), n: Number(v) })
-                }
-                opciones={BARRAS_N.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
-              />
-            </div>
-          </>
-        )}
+        {/* Opción propia del widget de barras: en vivo (3 sensores, fijo) o historial de uno
+            solo a elegir. Es lo que lo hace reutilizable para cualquiera de los tres. */}
+        {id === 'barras-distancia' && (() => {
+          const cfg = barras[id] ?? BARRAS_POR_DEFECTO;
+          return (
+            <>
+              <div>
+                <span className="etiqueta">Modo</span>
+                <Segmentado
+                  etiqueta="Modo del widget de barras"
+                  valor={cfg.modo}
+                  onCambiar={(v) => fijarBarras(id, { ...cfg, modo: v })}
+                  opciones={MODOS_BARRAS.map((o) => ({ valor: o.valor, texto: o.texto }))}
+                />
+                <p className="mt-1.5 text-[12px] text-tinta-suave">
+                  {cfg.modo === 'sensores'
+                    ? 'Una barra por sensor, siempre con la lectura más reciente.'
+                    : 'Las últimas lecturas de un solo sensor, para ver cómo varió.'}
+                </p>
+              </div>
+              {cfg.modo === 'historial' && (
+                <>
+                  <div>
+                    <span className="etiqueta">Sensor</span>
+                    <Segmentado
+                      etiqueta="Sensor del widget de barras"
+                      valor={cfg.sensor}
+                      onCambiar={(v) => fijarBarras(id, { ...cfg, sensor: v })}
+                      opciones={SENSORES.map((s) => ({ valor: s, texto: NOMBRE_SENSOR[s] }))}
+                    />
+                  </div>
+                  <div>
+                    <span className="etiqueta">Barras a la vez</span>
+                    <Segmentado
+                      etiqueta="Cantidad de barras"
+                      valor={String(cfg.n)}
+                      onCambiar={(v) => fijarBarras(id, { ...cfg, n: Number(v) })}
+                      opciones={BARRAS_N.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
+                    />
+                  </div>
+                </>
+              )}
+            </>
+          );
+        })()}
       </div>
       <button type="button" className="btn btn-acento mt-6 w-full" onClick={onCerrar}>
         Listo
