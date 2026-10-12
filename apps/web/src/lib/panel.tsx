@@ -27,10 +27,11 @@ import { usePrefRemota } from './socket.tsx';
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
 export const COLUMNAS = 24;
 /**
- * El tablero tiene SIEMPRE estas filas, pasen lo que pasen las tarjetas. El alto de fila sale de
- * repartir el alto libre entre ellas, así que no depende de la disposición: si dependiera, mover
- * una tarjeta una fila más abajo reescalaría el tablero entero debajo del cursor mientras se
- * arrastra, y la tarjeta se escaparía del ratón. Con `maxRows` nadie puede pasar de aquí.
+ * El tablero reparte el alto libre en al menos estas filas, pasen lo que pasen las tarjetas de
+ * fábrica. El alto de fila sale de repartirlo entre ellas, así que mientras la disposición quepa
+ * en FILAS no depende de ella: si dependiera, mover una tarjeta una fila más abajo reescalaría el
+ * tablero entero debajo del cursor mientras se arrastra, y la tarjeta se escaparía del ratón. Si
+ * sobran widgets para FILAS, el tablero crece con ellos y el área hace scroll.
  */
 export const FILAS = 10;
 /** Alto de fila cuando no se reparte (una columna), y suelo por debajo del cual no se lee nada. */
@@ -387,11 +388,10 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
     setCajas((prev) => {
       const c = prev[id] ?? POR_DEFECTO(id);
       const ancho = Math.min(COLUMNAS, Math.max(min.w, w));
-      // El alto no puede salirse del tablero: se acota a FILAS y, si hace falta, se sube la caja.
-      const alto = Math.min(FILAS, Math.max(min.h, h));
+      const alto = Math.max(min.h, h);
       return {
         ...prev,
-        [id]: { x: Math.min(c.x, COLUMNAS - ancho), y: Math.min(c.y, FILAS - alto), w: ancho, h: alto },
+        [id]: { x: Math.min(c.x, COLUMNAS - ancho), y: c.y, w: ancho, h: alto },
       };
     });
   }, []);

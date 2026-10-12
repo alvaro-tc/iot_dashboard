@@ -1,13 +1,12 @@
 // Panel principal. Las tarjetas viven en una grilla de react-grid-layout: cada cliente las
 // mueve y redimensiona a su gusto y la disposición se guarda en su navegador (lib/panel.tsx).
 //
-// El panel es un tablero de FILAS filas fijas que se reparten el alto libre hasta el borde de la
-// ventana: el alto de fila NO depende de la disposición. Si dependiera (tantas filas como ocupen
-// las tarjetas), bajar una tarjeta una fila reescalaría el tablero entero mientras se arrastra y
-// la tarjeta se escaparía del cursor; y pasadas ~12 filas los márgenes solos se comen el alto
-// disponible, las tarjetas quedan en tiras ilegibles y la grilla acaba siendo más alta que su
-// caja. `maxRows` impide salirse por abajo, y si aun así no cabe (ventana muy baja) el tablero
-// hace scroll en vez de recortar: más vale desplazar que cortar una tarjeta por la mitad.
+// El panel es un tablero de al menos FILAS filas que se reparten el alto libre hasta el borde de
+// la ventana: el alto de fila NO depende de la disposición en curso (solo del total ya guardado),
+// así que bajar una tarjeta una fila no reescala el tablero mientras se arrastra y la tarjeta no
+// se escapa del cursor. Con más widgets de los que caben en FILAS, o en una ventana muy baja, el
+// alto de fila toca su suelo y el tablero crece por debajo de la ventana: el área hace scroll en
+// vez de recortar o apretar las tarjetas en tiras ilegibles.
 //
 // El arrastre y los tiradores solo se activan en "modo edición": las tarjetas tienen dentro
 // mapas con pan y gráficas con zoom, y si el arrastre estuviera siempre activo pelearían por
@@ -24,7 +23,7 @@
 // El cajón muestra cada widget en miniatura (el widget de verdad, dibujado a tamaño real y
 // escalado) en dos columnas, para verlos todos sin scroll. Cada widget del tablero saca entonces
 // sus controles de esquina: lápiz para su tamaño y cruz para quitarlo.
-import React, { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import React, { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Check, LayoutGrid, Pencil, Plus, RotateCcw, X } from 'lucide-react';
 import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
 import {
@@ -98,11 +97,17 @@ function useAltoLibre(ref: React.RefObject<HTMLElement | null>, activo: boolean)
  * Caja de un elemento, que la fija el flex y no su contenido. Se mide ya en el primer paso de
  * layout: si se esperase al ResizeObserver, el primer pintado usaría el alto de fila de reserva
  * y la grilla aparecería del doble de alto antes de encogerse de golpe.
+ *
+ * Usa un ref de callback (no `useRef`) porque mientras cargan los robots este elemento ni se
+ * pinta: si se midiera con `useLayoutEffect(..., [ref])` el efecto correría una sola vez con
+ * `ref.current` a `null` (el objeto `ref` nunca cambia) y se quedaría en 0 para siempre. Con el
+ * callback, React lo vuelve a llamar en cuanto el elemento aparece de verdad en el DOM.
  */
-function useCajaMedida(ref: React.RefObject<HTMLElement | null>) {
+function useCajaMedida<T extends HTMLElement>() {
+  const [el, setEl] = useState<T | null>(null);
   const [caja, setCaja] = useState({ ancho: 0, alto: 0 });
+  const ref = useCallback((nodo: T | null) => setEl(nodo), []);
   useLayoutEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const r = el.getBoundingClientRect();
     setCaja({ ancho: r.width, alto: r.height });
@@ -111,8 +116,8 @@ function useCajaMedida(ref: React.RefObject<HTMLElement | null>) {
     );
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
-  return caja;
+  }, [el]);
+  return { ref, caja };
 }
 
 /** El widget de verdad, dibujado a tamaño real y escalado: preview fiel sin código aparte. */
@@ -396,8 +401,6 @@ export function Panel() {
   const { layout, guardarLayout, alternar, alcances } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
   const marcoRef = useRef<HTMLDivElement>(null);
-  const filaRef = useRef<HTMLDivElement>(null);
-  const areaRef = useRef<HTMLDivElement>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [editando, setEditando] = useState(false);
   const [widget, setWidget] = useState<IdTarjeta | null>(null);
@@ -408,17 +411,20 @@ export function Panel() {
   // tiradores solo estorbarían. Se decide con el ancho de la FILA, que no cambia al abrir el
   // cajón: con el de la grilla ya encogida, abrirlo bajaría del umbral y el panel entraría en
   // bucle (cierra edición → la grilla crece → vuelve a caber → abre edición → ...).
-  const fila = useCajaMedida(filaRef);
+  const { ref: filaRef, caja: fila } = useCajaMedida<HTMLDivElement>();
   const puedeColocar = fila.ancho >= ANCHO_GRILLA;
   const edicionActiva = editando && puedeColocar;
   /** Ajustar a la ventana solo donde la grilla es de verdad una grilla. */
   const ajustar = puedeColocar && layout.length > 0;
   const altoMarco = useAltoLibre(marcoRef, ajustar);
-  const { alto: altoArea } = useCajaMedida(areaRef);
-  // Reparto fijo: FILAS filas y sus márgenes. No mira la disposición, así que arrastrar no
-  // reescala el tablero. El suelo evita filas ilegibles en ventanas bajas, a costa de scroll.
+  const { ref: areaRef, caja: { alto: altoArea } } = useCajaMedida<HTMLDivElement>();
+  // Filas a repartir: FILAS como mínimo, o más si la disposición ya las ocupa (más widgets de
+  // los que caben en FILAS). Solo mira las cajas guardadas, no el arrastre en curso, así que
+  // arrastrar no reescala el tablero a medio gesto. El suelo evita filas ilegibles; si ni así
+  // cabe, el tablero crece por debajo de la ventana y el área hace scroll en vez de recortar.
+  const filas = Math.max(FILAS, ...layout.map(({ y, h }) => y + h), 0);
   const altoFila =
-    ajustar && altoArea ? Math.max(ALTO_FILA_MIN, (altoArea - (FILAS - 1) * MARGEN) / FILAS) : ALTO_FILA;
+    ajustar && altoArea ? Math.max(ALTO_FILA_MIN, (altoArea - (filas - 1) * MARGEN) / filas) : ALTO_FILA;
 
   if (cargando) {
     return (
@@ -533,7 +539,7 @@ export function Panel() {
                 breakpoints={{ grande: ANCHO_GRILLA, chico: 0 }}
                 cols={{ grande: COLUMNAS, chico: 1 }}
                 rowHeight={altoFila}
-                maxRows={ajustar ? FILAS : undefined}
+                maxRows={ajustar ? filas : undefined}
                 margin={[MARGEN, MARGEN]}
                 containerPadding={[0, 0]}
                 dragConfig={{ enabled: edicionActiva }}

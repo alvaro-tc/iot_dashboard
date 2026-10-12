@@ -65,6 +65,27 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
+/* Barra de scroll fina y del color del tema: la gris por defecto del navegador desentona con
+   las esquinas redondeadas y los colores durazno/naranja del resto de la página. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-borde) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-borde);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-tinta-suave);
+}
+
 :focus-visible {
   outline: 2px solid var(--color-acento);
   outline-offset: 2px;
