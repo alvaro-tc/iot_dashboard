@@ -7,6 +7,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import type { Layout } from 'react-grid-layout';
 import {
   Activity,
+  BarChart3,
   BatteryCharging,
   CalendarClock,
   Cog,
@@ -16,6 +17,7 @@ import {
   Ruler,
   Wifi,
 } from 'lucide-react';
+import { SENSORES, type Sensor } from '@iot/shared';
 import { METRICAS, esAlcance, metrica, type Alcance, type IdMetrica } from './metricas.ts';
 
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
@@ -65,6 +67,13 @@ export const TARJETAS_PANEL = [
   { id: 'dist-izq', texto: 'Distancia izquierda', Icono: Ruler, caja: { x: 0, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'dist-centro', texto: 'Distancia central', Icono: Ruler, caja: { x: 6, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
   { id: 'dist-der', texto: 'Distancia derecha', Icono: Ruler, caja: { x: 12, y: 6, w: 6, h: 4 }, min: { w: 5, h: 3 } },
+  {
+    id: 'barras-distancia',
+    texto: 'Barras de distancia',
+    Icono: BarChart3,
+    caja: { x: 18, y: 6, w: 6, h: 4 },
+    min: { w: 4, h: 3 },
+  },
 ] as const;
 
 /**
@@ -112,6 +121,18 @@ export const TEMAS_RADAR = [
 ] as const;
 export type TemaRadar = (typeof TEMAS_RADAR)[number]['valor'];
 
+/** Cuántas barras a la vez en el widget de barras de distancia. */
+export const BARRAS_N = [
+  { valor: 5, texto: '5' },
+  { valor: 10, texto: '10' },
+  { valor: 20, texto: '20' },
+] as const;
+export interface ConfigBarras {
+  sensor: Sensor;
+  n: number;
+}
+export const BARRAS_POR_DEFECTO: ConfigBarras = { sensor: 'central', n: 10 };
+
 /**
  * Un id del catálogo, o el de un contador instanciado, que no se puede escribir como literal.
  * `infoTarjeta` resuelve cualquiera de los dos.
@@ -132,6 +153,7 @@ const CLAVE_CAJAS = 'panel-disposicion-v4';
 const CLAVE_RADAR = 'panel-radar-tema';
 const CLAVE_METRICAS = 'panel-contadores';
 const CLAVE_ALCANCES = 'panel-motor-alcance';
+const CLAVE_BARRAS = 'panel-barras-distancia';
 const TODAS = TARJETAS_PANEL.map((t) => t.id) as IdTarjeta[];
 /** Ids que se pueden restaurar de localStorage: los del catálogo y los contadores. */
 const conocido = (id: unknown): id is IdTarjeta =>
@@ -211,6 +233,22 @@ function leerAlcances(): Record<string, Alcance> {
   }
 }
 
+/** Igual: una config mal formada (versión vieja, localStorage tocado a mano) cae a la de fábrica. */
+function leerBarras(): Record<string, ConfigBarras> {
+  try {
+    const crudo = JSON.parse(localStorage.getItem(CLAVE_BARRAS) ?? '{}') as Record<string, Partial<ConfigBarras>>;
+    const validas: Record<string, ConfigBarras> = {};
+    for (const [id, c] of Object.entries(crudo ?? {})) {
+      if (c && SENSORES.includes(c.sensor as Sensor) && typeof c.n === 'number' && c.n > 0) {
+        validas[id] = { sensor: c.sensor as Sensor, n: c.n };
+      }
+    }
+    return validas;
+  } catch {
+    return {};
+  }
+}
+
 interface ValorPanel {
   visibles: IdTarjeta[];
   ve: (id: IdTarjeta) => boolean;
@@ -236,6 +274,9 @@ interface ValorPanel {
   /** Ventana de cada widget de motor: en vivo, hoy o total. */
   alcances: Record<string, Alcance>;
   fijarAlcance: (id: IdTarjeta, a: Alcance) => void;
+  /** Sensor y cantidad de barras de cada widget de barras de distancia, por id. */
+  barras: Record<string, ConfigBarras>;
+  fijarBarras: (id: IdTarjeta, c: ConfigBarras) => void;
 }
 
 const Contexto = createContext<ValorPanel>({
@@ -255,6 +296,8 @@ const Contexto = createContext<ValorPanel>({
   anadirContador: () => '',
   alcances: {},
   fijarAlcance: () => {},
+  barras: {},
+  fijarBarras: () => {},
 });
 export const usePanelTarjetas = () => useContext(Contexto);
 
@@ -264,6 +307,7 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   const [temaRadar, setTemaRadar] = useState<TemaRadar>(leerTemaRadar);
   const [metricas, setMetricas] = useState<Record<string, IdMetrica>>(leerMetricas);
   const [alcances, setAlcances] = useState<Record<string, Alcance>>(leerAlcances);
+  const [barras, setBarras] = useState<Record<string, ConfigBarras>>(leerBarras);
 
   useEffect(() => {
     try {
@@ -272,10 +316,11 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
       localStorage.setItem(CLAVE_RADAR, temaRadar);
       localStorage.setItem(CLAVE_METRICAS, JSON.stringify(metricas));
       localStorage.setItem(CLAVE_ALCANCES, JSON.stringify(alcances));
+      localStorage.setItem(CLAVE_BARRAS, JSON.stringify(barras));
     } catch {
       /* navegación privada: la preferencia solo dura la sesión */
     }
-  }, [visibles, cajas, temaRadar, metricas, alcances]);
+  }, [visibles, cajas, temaRadar, metricas, alcances, barras]);
 
   const alternar = useCallback((id: IdTarjeta) => {
     setVisibles((xs) =>
@@ -306,6 +351,7 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
   }, []);
   const fijarMetrica = useCallback((id: IdTarjeta, m: IdMetrica) => setMetricas((prev) => ({ ...prev, [id]: m })), []);
   const fijarAlcance = useCallback((id: IdTarjeta, a: Alcance) => setAlcances((prev) => ({ ...prev, [id]: a })), []);
+  const fijarBarras = useCallback((id: IdTarjeta, c: ConfigBarras) => setBarras((prev) => ({ ...prev, [id]: c })), []);
   const restablecerDisposicion = useCallback(() => setCajas({}), []);
 
   const fijarTamano = useCallback((id: IdTarjeta, w: number, h: number) => {
@@ -366,6 +412,8 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
         anadirContador,
         alcances,
         fijarAlcance,
+        barras,
+        fijarBarras,
       }}
     >
       {children}

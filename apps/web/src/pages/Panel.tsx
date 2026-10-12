@@ -34,6 +34,8 @@ import {
   ANCHO_GRILLA,
   ANCHO_LATERAL,
   ANCHOS,
+  BARRAS_N,
+  BARRAS_POR_DEFECTO,
   COLUMNAS,
   esContador,
   FILAS,
@@ -50,7 +52,10 @@ import {
 import { useRobots } from '../lib/robots.tsx';
 import { ALCANCES, METRICAS, metrica, type IdMetrica } from '../lib/metricas.ts';
 import { useSocket } from '../lib/socket.tsx';
+import { SENSORES } from '@iot/shared';
+import { NOMBRE_SENSOR } from '../lib/formato.ts';
 import { DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
+import { TarjetaBarrasDistancia } from '../components/TarjetaBarrasDistancia.tsx';
 import { TarjetaBateria } from '../components/TarjetaBateria.tsx';
 import { TarjetaConectividad } from '../components/TarjetaConectividad.tsx';
 import { TarjetaContador, useResumen } from '../components/TarjetaContador.tsx';
@@ -220,8 +225,18 @@ function CajonWidgets({ vista, onEditar }: { vista?: (id: IdTarjeta) => ReactNod
 
 /** Tamaño de un widget por presets. Lo fino se sigue haciendo arrastrando los tiradores. */
 function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }) {
-  const { layout, fijarTamano, temaRadar, fijarTemaRadar, metricas, fijarMetrica, alcances, fijarAlcance } =
-    usePanelTarjetas();
+  const {
+    layout,
+    fijarTamano,
+    temaRadar,
+    fijarTemaRadar,
+    metricas,
+    fijarMetrica,
+    alcances,
+    fijarAlcance,
+    barras,
+    fijarBarras,
+  } = usePanelTarjetas();
   const { min } = infoTarjeta(id);
   // El contador se llama por lo que cuenta: es su título en el tablero.
   const texto = esContador(id) ? metrica(metricas[id]).texto : infoTarjeta(id).texto;
@@ -320,6 +335,33 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
                   : 'Más saturación y bordes marcados, para proyector o poca luz.'}
             </p>
           </div>
+        )}
+
+        {/* Opción propia del widget de barras: de qué sensor ultrasónico y cuántas lecturas
+            a la vez. Es lo que lo hace reutilizable para cualquiera de los tres. */}
+        {id === 'barras-distancia' && (
+          <>
+            <div>
+              <span className="etiqueta">Sensor</span>
+              <Segmentado
+                etiqueta="Sensor del widget de barras"
+                valor={(barras[id] ?? BARRAS_POR_DEFECTO).sensor}
+                onCambiar={(v) => fijarBarras(id, { ...(barras[id] ?? BARRAS_POR_DEFECTO), sensor: v })}
+                opciones={SENSORES.map((s) => ({ valor: s, texto: NOMBRE_SENSOR[s] }))}
+              />
+            </div>
+            <div>
+              <span className="etiqueta">Barras a la vez</span>
+              <Segmentado
+                etiqueta="Cantidad de barras"
+                valor={String((barras[id] ?? BARRAS_POR_DEFECTO).n)}
+                onCambiar={(v) =>
+                  fijarBarras(id, { ...(barras[id] ?? BARRAS_POR_DEFECTO), n: Number(v) })
+                }
+                opciones={BARRAS_N.map((o) => ({ valor: String(o.valor), texto: o.texto }))}
+              />
+            </div>
+          </>
         )}
       </div>
       <button type="button" className="btn btn-acento mt-6 w-full" onClick={onCerrar}>
@@ -425,6 +467,8 @@ export function Panel() {
         return <TarjetaDistancias solo="central" />;
       case 'dist-der':
         return <TarjetaDistancias solo="derecho" />;
+      case 'barras-distancia':
+        return <TarjetaBarrasDistancia id={id} />;
       default:
         // Contadores: tantos como se añadan, cada uno con su métrica.
         return esContador(id) ? <TarjetaContador id={id} /> : null;
