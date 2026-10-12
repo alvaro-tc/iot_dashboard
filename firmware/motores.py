@@ -38,14 +38,22 @@ class ControlMotores:
         return max(-cfg.PWM_MAXIMO,
                    min(cfg.PWM_MAXIMO, valor))
 
-    def aplicar_motor(self, velocidad, pin1, pin2, pwm):
+    def aplicar_motor(self, velocidad, pin1, pin2, pwm, invertir):
         velocidad = self.limitar_pwm(velocidad)
 
-        if velocidad > 0:
+        # `invertir` corrige cableado, no logica: los dos motores van montados en espejo
+        # en el chasis, asi que el mismo sentido electrico hace girar una rueda al revés.
+        # Solo toca los pines del TB6612; el valor que se DEVUELVE sigue siendo el logico
+        # (las dos ruedas en positivo = avanzando), porque de ese signo viven la telemetria
+        # y movimiento() en packages/shared/src/robot.ts. Si se invirtiera el devuelto, el
+        # dashboard diria "girando" mientras el robot avanza recto.
+        sentido = -velocidad if invertir else velocidad
+
+        if sentido > 0:
             pin1.value(1)
             pin2.value(0)
 
-        elif velocidad < 0:
+        elif sentido < 0:
             pin1.value(0)
             pin2.value(1)
 
@@ -67,14 +75,16 @@ class ControlMotores:
             izquierda,
             self.ain1,
             self.ain2,
-            self.pwm_izquierdo
+            self.pwm_izquierdo,
+            cfg.INVERTIR_IZQUIERDA
         )
 
         self.velocidad_derecha = self.aplicar_motor(
             derecha,
             self.bin1,
             self.bin2,
-            self.pwm_derecho
+            self.pwm_derecho,
+            cfg.INVERTIR_DERECHA
         )
 
     def detener(self):
@@ -85,3 +95,38 @@ class ControlMotores:
             "izquierda_pwm": self.velocidad_izquierda,
             "derecha_pwm": self.velocidad_derecha
         }
+
+
+def demo():
+    import time
+
+    motores = ControlMotores()
+
+    # Una rueda a la vez, para ver cual va al revés sin que la otra despiste.
+    for nombre, izq, der in (("IZQUIERDA", 150, 0), ("DERECHA", 0, 150)):
+        print("rueda", nombre, "-> deberia girar hacia ADELANTE")
+        motores.establecer_velocidades(izq, der)
+        time.sleep(2)
+        motores.detener()
+        time.sleep(1)
+
+    # El estado publicado tiene que seguir el signo logico, invertido o no el cableado:
+    # es de lo que el dashboard deduce si avanza o gira.
+    motores.establecer_velocidades(200, 200)
+    estado = motores.obtener_estado()
+    motores.detener()
+
+    assert estado == {"izquierda_pwm": 200, "derecha_pwm": 200}, estado
+
+    # Y los limites se recortan, no se desbordan.
+    motores.establecer_velocidades(999, -999)
+    estado = motores.obtener_estado()
+    motores.detener()
+
+    assert estado == {"izquierda_pwm": cfg.PWM_MAXIMO, "derecha_pwm": -cfg.PWM_MAXIMO}, estado
+
+    print("ok: si alguna rueda giro hacia atras, pon su INVERTIR_* en configuracion.py")
+
+
+if __name__ == "__main__":
+    demo()

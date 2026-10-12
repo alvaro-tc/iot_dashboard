@@ -11,6 +11,7 @@ import {
   usoAcumulado,
   velocidadAgregada,
   velocidadEnVivo,
+  ultimaDistancia,
 } from './metricas.ts';
 
 type Lectura = Parameters<typeof usoAcumulado>[0][number];
@@ -77,6 +78,19 @@ assert.equal(segundosDeLecturas(undefined), 0);
   } as Parameters<(typeof METRICAS)[number]['calc']>[0];
   for (const m of METRICAS) assert.ok(m.calc(ctx).length > 0, m.valor);
   assert.equal(metrica('loquesea' as never).valor, METRICAS[0].valor);
+}
+
+// Distancia por sensor: vale la lectura más reciente, cada sensor por su cuenta, y sin lecturas
+// (o sin objeto en rango) es null -> el contador escribe '—' en vez de un 0 que parecería real.
+{
+  const d = (creadoEn: number, i: number | null, c: number | null, der: number | null) =>
+    ({ creadoEn, distanciaIzquierdaCm: i, distanciaCentralCm: c, distanciaDerechaCm: der }) as never;
+  const lecturas = [d(0, 10, 20, 30), d(500, 11, 22, null)];
+  assert.equal(ultimaDistancia(lecturas, 'izquierdo'), 11);
+  assert.equal(ultimaDistancia(lecturas, 'central'), 22);
+  assert.equal(ultimaDistancia(lecturas, 'derecho'), null);
+  assert.equal(ultimaDistancia([], 'central'), null);
+  assert.equal(metrica('dist-central').calc({ lecturas, ahora: 0 } as never), '22.0 cm');
 }
 
 // Actividad del motor: la velocidad conserva el signo (adelante/atrás), que es lo que el

@@ -6,8 +6,8 @@
 //     acumulado a lo largo de la ventana de telemetría que hay en memoria.
 //   - `METRICAS`: el catálogo del widget "Contador". Cada fila sabe de dónde sale su número y
 //     cómo se escribe; añadir un contador nuevo es añadir una fila, el widget no cambia.
-import { PWM_ACTIVO, type Lectura } from '@iot/shared';
-import { duracion } from './formato.ts';
+import { PWM_ACTIVO, distanciaDe, type Lectura, type Sensor } from '@iot/shared';
+import { cm, duracion, NOMBRE_SENSOR } from './formato.ts';
 import type { Resumen } from './types.ts';
 
 export type Motor = 'izquierdo' | 'derecho';
@@ -61,6 +61,12 @@ interface Contexto {
 }
 
 const entero = (n: number) => Math.round(n).toLocaleString('es');
+
+/** Distancia del sensor en la lectura más reciente de la ventana en memoria. */
+export const ultimaDistancia = (lecturas: Lectura[], sensor: Sensor): number | null => {
+  const l = lecturas.at(-1);
+  return l ? distanciaDe(l, sensor) : null;
+};
 
 /** Catálogo del contador. `calc` devuelve el número ya escrito, con su unidad. */
 export const METRICAS = [
@@ -117,6 +123,27 @@ export const METRICAS = [
     alcance: 'Hoy',
     calc: ({ resumen }: Contexto) =>
       entero((resumen.cercaIzquierda ?? 0) + (resumen.cercaCentral ?? 0) + (resumen.cercaDerecha ?? 0)),
+  },
+  // Distancia de un sensor ultrasónico, en cm: el valor crudo de la última lectura. El sensor
+  // se elige como cualquier otra métrica del contador, así que para ver los tres a la vez se
+  // ponen tres contadores. `null` (sin objeto en rango) se escribe '—', no un cero falso.
+  {
+    valor: 'dist-izquierdo',
+    texto: `Distancia ${NOMBRE_SENSOR.izquierdo}`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => cm(ultimaDistancia(lecturas, 'izquierdo')),
+  },
+  {
+    valor: 'dist-central',
+    texto: `Distancia ${NOMBRE_SENSOR.central}`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => cm(ultimaDistancia(lecturas, 'central')),
+  },
+  {
+    valor: 'dist-derecho',
+    texto: `Distancia ${NOMBRE_SENSOR.derecho}`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => cm(ultimaDistancia(lecturas, 'derecho')),
   },
   {
     valor: 'bateria',

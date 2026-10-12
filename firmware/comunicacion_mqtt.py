@@ -25,7 +25,8 @@ class ClienteMQTT:
             port=cfg.MQTT_PUERTO,
             user=cfg.MQTT_USUARIO or None,
             password=cfg.MQTT_CLAVE or None,
-            keepalive=30
+            keepalive=30,
+            ssl=cfg.MQTT_TLS
         )
 
         # Last Will: si el robot se queda sin bateria o pierde la red de golpe, el broker

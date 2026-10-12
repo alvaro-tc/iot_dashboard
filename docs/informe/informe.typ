@@ -74,7 +74,8 @@
         columns: (1fr, 1fr),
         row-gutter: 0.6cm,
         [*Autor*], [Álvaro],
-        [*Repositorio*], [`iot_dashboard` (monorepo pnpm)],
+        [*Repositorio*], [#text(size: 9.5pt)[#link("https://github.com/alvaro-tc/iot_dashboard")[alvaro-tc/iot\_dashboard]]],
+        [*Despliegue en producción*], [#text(size: 9.5pt)[#link("https://iot-dashboard.tumype.com/")[iot-dashboard.tumype.com]]],
         [*Fecha del informe*], [12 de octubre de 2026],
         [*Alcance*], [Movimiento y evasión de obstáculos (sin succión)],
       )
@@ -289,11 +290,11 @@ El nodo físico es un *ESP32* con los siguientes componentes (pines reales de
     stroke: 0.5pt + rgb("#E7E2DD"),
     inset: 7pt,
     [*Componente*], [*Pines (ESP32)*], [*Función*],
-    [3× HC-SR04 (ultrasónico)], [Izq. `TRIG 18 / ECHO 19`\ Centro `TRIG 21 / ECHO 22`\
-      Der. `TRIG 23 / ECHO 5`], [Distancia a obstáculos de 2 a 400 cm (rango útil mostrado
+    [3× HC-SR04 (ultrasónico)], [Izq. `TRIG 19 / ECHO 21`\ Centro `TRIG 5 / ECHO 18`\
+      Der. `TRIG 22 / ECHO 23`], [Distancia a obstáculos de 2 a 400 cm (rango útil mostrado
       en el dashboard: 0–100 cm). Montados a −45°, 0° y +45° respecto al frente del robot],
-    [Driver TB6612FNG (puente H)], [`PWMA 25, AIN1 26, AIN2 27`\ `PWMB 14, BIN1 16, BIN2 17`\
-      `STBY 13`], [Control de dos motorreductores por PWM a 20 kHz, con sentido
+    [Driver TB6612FNG (puente H)], [`PWMA 25, AIN1 26, AIN2 27`\ `PWMB 13, BIN1 14, BIN2 32`\
+      `STBY 4`], [Control de dos motorreductores por PWM a 20 kHz, con sentido
       independiente por rueda (tracción diferencial)],
     [Divisor resistivo + ADC], [`PIN 34`, atenuación 11 dB], [Lectura del voltaje de batería;
       el factor del divisor y los límites de voltaje (6.0–8.4 V) se calibran en `configuracion.py`],
@@ -323,17 +324,17 @@ El nodo físico es un *ESP32* con los siguientes componentes (pines reales de
     caja((0, 5.6), 2.6, 1.1, [HC-SR04\ izquierdo (−45°)])
     caja((7, 6.6), 2.6, 1.1, [HC-SR04\ central (0°)])
     caja((13.5, 5.6), 2.6, 1.1, [HC-SR04\ derecho (+45°)])
-    pin((1.3, 5.6), (6.8, 4.6), "TRIG 18 / ECHO 19")
-    pin((8.3, 6.6), (8.3, 5.2), "TRIG 21 / ECHO 22")
-    pin((14.8, 5.6), (10.2, 4.6), "TRIG 23 / ECHO 5")
+    pin((1.3, 5.6), (6.8, 4.6), "TRIG 19 / ECHO 21")
+    pin((8.3, 6.6), (8.3, 5.2), "TRIG 5 / ECHO 18")
+    pin((14.8, 5.6), (10.2, 4.6), "TRIG 22 / ECHO 23")
 
     caja((0.3, 0.2), 4.2, 1.6, [TB6612FNG\ rueda izquierda], color: white)
     caja((13.6, 0.2), 4.2, 1.6, [TB6612FNG\ rueda derecha], color: white)
     pin((4.5, 1.2), (6, 2.6), "PWMA 25 / AIN1 26 / AIN2 27")
-    pin((13.6, 1.2), (10, 2.6), "PWMB 14 / BIN1 16 / BIN2 17")
+    pin((13.6, 1.2), (10, 2.6), "PWMB 13 / BIN1 14 / BIN2 32")
 
     caja((5.2, 0.4), 1.6, 0.9, [STBY])
-    pin((6, 1.3), (7, 2.2), "GPIO 13")
+    pin((6, 1.3), (7, 2.2), "GPIO 4")
 
     caja((8, -2.1), 3, 1.1, [Divisor resistivo\ + batería])
     pin((9.5, -1), (9.5, 2.2), "ADC 34 (atn. 11dB)")
@@ -862,7 +863,15 @@ mecanismo de autenticación.
 
 == Código fuente
 
-Repositorio completo (monorepo `pnpm`): secciones citadas a lo largo de este informe —
+Repositorio completo (monorepo `pnpm`):
+#link("https://github.com/alvaro-tc/iot_dashboard")[github.com/alvaro-tc/iot\_dashboard].
+
+Despliegue en producción, en vivo:
+#link("https://iot-dashboard.tumype.com/")[iot-dashboard.tumype.com] — cuentas de
+demostración en `docs/cuentas-de-prueba.md` (`alvaro@demo.com` / `cliente123` y
+`admin@demo.com` / `admin123`).
+
+Secciones citadas a lo largo de este informe —
 
 - Esquema de base de datos: `apps/api/db/schema.sql`, datos de demostración:
   `apps/api/db/seed.sql`.
@@ -965,6 +974,8 @@ visitante del enlace, sin maquillar.
 // ===========================================================================
 = Referencias
 
+- Repositorio del proyecto. #link("https://github.com/alvaro-tc/iot_dashboard")
+- Despliegue en producción. #link("https://iot-dashboard.tumype.com/")
 - PostgreSQL 16 — Documentación oficial. #link("https://www.postgresql.org/docs/")
 - MQTT Version 5.0 — OASIS Standard. #link("https://docs.oasis-open.org/mqtt/mqtt/v5.0/mqtt-v5.0.html")
 - Eclipse Mosquitto — Documentación. #link("https://mosquitto.org/documentation/")
