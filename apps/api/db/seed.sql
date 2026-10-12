@@ -10,7 +10,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto; -- crypt() + gen_salt('bf') = hash bcry
 INSERT INTO usuarios (correo, contrasena, nombre, rol) VALUES
   ('admin@demo.com',  crypt('admin123',   gen_salt('bf', 10)), 'Administración', 'admin'),
   ('alvaro@demo.com', crypt('cliente123', gen_salt('bf', 10)), 'Álvaro Quispe',  'cliente'),
-  ('maria@demo.com',  crypt('cliente123', gen_salt('bf', 10)), 'María Condori',  'cliente');
+  ('maria@demo.com',  crypt('cliente123', gen_salt('bf', 10)), 'María Condori',  'cliente'),
+  ('demo@gmail.com',  crypt('Test1234!',  gen_salt('bf', 10)), 'Cuenta demo',    'cliente');
 
 -- Tokens de demo (db/reset.ts los registra también en Mosquitto):
 --   roomba-sala    -> SalaDemoToken0123456789abcdefgh
@@ -22,13 +23,16 @@ INSERT INTO dispositivos (id, usuario_id, nombre, ubicacion, token_hash, version
   ('roomba-cocina', (SELECT id FROM usuarios WHERE correo = 'alvaro@demo.com'), 'Roomba Cocina', 'Cocina',
      crypt('CocinaDemoToken0123456789abcdef', gen_salt('bf', 10)), '1.2.0', current_date - 6),
   ('roomba-maria',  (SELECT id FROM usuarios WHERE correo = 'maria@demo.com'),  'Roomba Pasillo', 'Pasillo',
-     crypt('MariaDemoToken0123456789abcdefg', gen_salt('bf', 10)), '1.1.3', current_date - 2);
+     crypt('MariaDemoToken0123456789abcdefg', gen_salt('bf', 10)), '1.1.3', current_date - 2),
+  ('roomba-demo',   (SELECT id FROM usuarios WHERE correo = 'demo@gmail.com'),  'Roomba Demo',    'Sala de estar',
+     crypt('DemoCuentaToken0123456789abcdefg', gen_salt('bf', 10)), '1.2.0', current_date - 14);
 
 -- La configuración la crea el trigger trg_configuracion_por_defecto; aquí solo se ajusta
 -- la velocidad de crucero que distingue a cada robot.
 UPDATE configuracion_dispositivo SET velocidad_base = 180 WHERE dispositivo_id = 'roomba-sala';
 UPDATE configuracion_dispositivo SET velocidad_base = 130 WHERE dispositivo_id = 'roomba-cocina';
 UPDATE configuracion_dispositivo SET velocidad_base = 210 WHERE dispositivo_id = 'roomba-maria';
+UPDATE configuracion_dispositivo SET velocidad_base = 180 WHERE dispositivo_id = 'roomba-demo';
 
 -- Sesiones pasadas. reset.ts las rellena con lecturas simuladas:
 -- la duración de cada una sale de iniciada_en/finalizada_en.
@@ -66,5 +70,20 @@ FROM (VALUES
   ('roomba-cocina',-3,  time '12:50', time '13:08'),
   ('roomba-cocina',-4,  time '11:35', time '11:47'),
   ('roomba-cocina',-5,  time '13:00', time '13:20'),
-  ('roomba-maria', -1,  time '16:20', time '16:47')
+  ('roomba-maria', -1,  time '16:20', time '16:47'),
+  ('roomba-demo',   0,  time '08:30', time '09:05'),
+  ('roomba-demo',   0,  time '14:32', time '15:10'),
+  ('roomba-demo',  -1,  time '09:15', time '09:58'),
+  ('roomba-demo',  -2,  time '18:00', time '18:25'),
+  ('roomba-demo',  -3,  time '08:45', time '09:12'),
+  ('roomba-demo',  -4,  time '10:10', time '10:38'),
+  ('roomba-demo',  -5,  time '09:00', time '09:30'),
+  ('roomba-demo',  -6,  time '11:20', time '11:52'),
+  ('roomba-demo',  -7,  time '08:35', time '09:00'),
+  ('roomba-demo',  -8,  time '16:15', time '16:40'),
+  ('roomba-demo',  -9,  time '09:40', time '10:05'),
+  ('roomba-demo', -10,  time '12:05', time '12:33'),
+  ('roomba-demo', -11,  time '08:50', time '09:18'),
+  ('roomba-demo', -12,  time '18:20', time '18:44'),
+  ('roomba-demo', -13,  time '10:30', time '10:52')
 ) AS v(dispositivo_id, dia, t0, t1);

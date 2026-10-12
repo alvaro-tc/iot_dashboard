@@ -15,22 +15,31 @@ export function Login() {
   const [general, setGeneral] = useState('');
   const [enviando, setEnviando] = useState(false);
 
-  const enviar = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const enviarCredenciales = async (correo: string, clave: string) => {
     setErrores({});
     setGeneral('');
-    if (!email.trim()) return setErrores({ email: 'Escribe tu correo.' });
-    if (!password) return setErrores({ password: 'Escribe tu contraseña.' });
-
     setEnviando(true);
     try {
-      await login(email.trim(), password, recordar);
+      await login(correo, clave, recordar);
     } catch (err) {
       if (err instanceof ApiError && Object.keys(err.fields).length) setErrores(err.fields);
       else setGeneral(errorMessage(err));
     } finally {
       setEnviando(false);
     }
+  };
+
+  const enviar = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email.trim()) return setErrores({ email: 'Escribe tu correo.' });
+    if (!password) return setErrores({ password: 'Escribe tu contraseña.' });
+    void enviarCredenciales(email.trim(), password);
+  };
+
+  const entrarComoDemo = () => {
+    setEmail('demo@gmail.com');
+    setPassword('Test1234!');
+    void enviarCredenciales('demo@gmail.com', 'Test1234!');
   };
 
   return (
@@ -102,6 +111,15 @@ export function Login() {
 
           <button type="submit" className="btn btn-acento mt-6 h-11 w-full" disabled={enviando}>
             {enviando ? 'Entrando…' : 'Entrar'}
+          </button>
+
+          <button
+            type="button"
+            className="btn mt-3 h-11 w-full"
+            onClick={entrarComoDemo}
+            disabled={enviando}
+          >
+            Probar con la cuenta demo
           </button>
 
           <p className="mt-6 text-center text-[14px] text-tinta-suave">

@@ -110,6 +110,7 @@ const demo = [
   ['roomba-sala', 'SalaDemoToken0123456789abcdefgh'],
   ['roomba-cocina', 'CocinaDemoToken0123456789abcdef'],
   ['roomba-maria', 'MariaDemoToken0123456789abcdefg'],
+  ['roomba-demo', 'DemoCuentaToken0123456789abcdefg'],
 ];
 try {
   for (const [id, token] of demo) {
