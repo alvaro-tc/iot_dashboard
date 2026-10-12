@@ -25,7 +25,11 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # Typecheck de api, web y shared + autocomprobaciones.
+      # Las autocomprobaciones de api cargan env.ts, que exige estas dos variables.
       - run: pnpm lint
+        env:
+          MQTT_ADMIN_PASS: ci-dummy
+          JWT_SECRET: ci-dummy-secret-1234567
 
       - name: Build web
         run: pnpm --filter @iot/web build
