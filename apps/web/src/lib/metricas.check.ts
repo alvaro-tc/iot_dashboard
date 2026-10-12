@@ -12,6 +12,8 @@ import {
   velocidadAgregada,
   velocidadEnVivo,
   ultimaDistancia,
+  ultimoEco,
+  US_POR_CM,
 } from './metricas.ts';
 
 type Lectura = Parameters<typeof usoAcumulado>[0][number];
@@ -91,6 +93,10 @@ assert.equal(segundosDeLecturas(undefined), 0);
   assert.equal(ultimaDistancia(lecturas, 'derecho'), null);
   assert.equal(ultimaDistancia([], 'central'), null);
   assert.equal(metrica('dist-central').calc({ lecturas, ahora: 0 } as never), '22.0 cm');
+  // En crudo es el pulso de eco: deshace el /58.0 del firmware, y sin lectura sigue siendo null.
+  assert.equal(ultimoEco(lecturas, 'central'), 22 * US_POR_CM);
+  assert.equal(ultimoEco(lecturas, 'derecho'), null);
+  assert.equal(metrica('eco-central').calc({ lecturas, ahora: 0 } as never), '1276 µs');
 }
 
 // Actividad del motor: la velocidad conserva el signo (adelante/atrás), que es lo que el

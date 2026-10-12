@@ -5,6 +5,8 @@ import { DIST_EVASION_CM, type EstadoDistancia, type Movimiento, type Sensor } f
 export const cm = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(1)} cm`);
 export const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v)} %`);
 export const ms = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v)} ms`);
+/** Microsegundos: el dato crudo del eco del ultrasónico, entero (el sensor no da más precisión). */
+export const us = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${Math.round(v)} µs`);
 export const voltios = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(2)} V`);
 export const grados = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${v.toFixed(1)}°`);
 

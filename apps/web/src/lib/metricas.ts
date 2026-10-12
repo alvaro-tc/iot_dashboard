@@ -7,7 +7,7 @@
 //   - `METRICAS`: el catálogo del widget "Contador". Cada fila sabe de dónde sale su número y
 //     cómo se escribe; añadir un contador nuevo es añadir una fila, el widget no cambia.
 import { PWM_ACTIVO, distanciaDe, type Lectura, type Sensor } from '@iot/shared';
-import { cm, duracion, NOMBRE_SENSOR } from './formato.ts';
+import { cm, duracion, us, NOMBRE_SENSOR } from './formato.ts';
 import type { Resumen } from './types.ts';
 
 export type Motor = 'izquierdo' | 'derecho';
@@ -66,6 +66,20 @@ const entero = (n: number) => Math.round(n).toLocaleString('es');
 export const ultimaDistancia = (lecturas: Lectura[], sensor: Sensor): number | null => {
   const l = lecturas.at(-1);
   return l ? distanciaDe(l, sensor) : null;
+};
+
+/**
+ * Microsegundos de eco por centímetro: el mismo 58.0 con el que el firmware convierte el pulso
+ * del HC-SR04 a cm (`medir_distancia` en firmware/sensores.py). Solo viaja la distancia por MQTT,
+ * así que el dato crudo se reconstruye deshaciendo esa división; si se recalibra el firmware,
+ * este número va con él.
+ */
+export const US_POR_CM = 58.0;
+
+/** El mismo valor en crudo: duración del pulso de eco, tal como lo midió el sensor. */
+export const ultimoEco = (lecturas: Lectura[], sensor: Sensor): number | null => {
+  const d = ultimaDistancia(lecturas, sensor);
+  return d === null ? null : d * US_POR_CM;
 };
 
 /** Catálogo del contador. `calc` devuelve el número ya escrito, con su unidad. */
@@ -144,6 +158,26 @@ export const METRICAS = [
     texto: `Distancia ${NOMBRE_SENSOR.derecho}`,
     alcance: 'Última lectura',
     calc: ({ lecturas }: Contexto) => cm(ultimaDistancia(lecturas, 'derecho')),
+  },
+  // El mismo valor sin convertir, para contrastar contra el sensor: se elige uno u otro en el
+  // mismo desplegable, así que un contador puede ir en cm y el de al lado en crudo.
+  {
+    valor: 'eco-izquierdo',
+    texto: `Eco ${NOMBRE_SENSOR.izquierdo} (crudo)`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => us(ultimoEco(lecturas, 'izquierdo')),
+  },
+  {
+    valor: 'eco-central',
+    texto: `Eco ${NOMBRE_SENSOR.central} (crudo)`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => us(ultimoEco(lecturas, 'central')),
+  },
+  {
+    valor: 'eco-derecho',
+    texto: `Eco ${NOMBRE_SENSOR.derecho} (crudo)`,
+    alcance: 'Última lectura',
+    calc: ({ lecturas }: Contexto) => us(ultimoEco(lecturas, 'derecho')),
   },
   {
     valor: 'bateria',
