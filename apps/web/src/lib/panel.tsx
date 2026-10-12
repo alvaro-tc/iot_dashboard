@@ -1,5 +1,8 @@
-// Qué tarjetas ve cada cliente en su panel, dónde están y de qué tamaño. Se guarda en este
-// navegador, como el tema, y el cambio se aplica al instante (el panel lee este contexto).
+// Qué tarjetas ve cada cliente en su panel, dónde están y de qué tamaño. Se guarda en la
+// cuenta, como el tema: lo que se mueve, se añade o se ajusta aquí aparece igual al entrar con
+// la misma cuenta en otro dispositivo (lo sincroniza `usePrefRemota`, en una sola clave con
+// todo el panel). El localStorage sigue debajo, como respaldo local y para pintar sin esperar
+// al servidor. El cambio se aplica al instante (el panel lee este contexto).
 //
 // La disposición es una grilla de react-grid-layout: `visibles` dice qué se dibuja y `cajas`
 // dónde. Se guardan en claves separadas para que ocultar una tarjeta no pierda su sitio.
@@ -19,6 +22,7 @@ import {
 } from 'lucide-react';
 import { SENSORES, type Sensor } from '@iot/shared';
 import { METRICAS, esAlcance, metrica, type Alcance, type IdMetrica } from './metricas.ts';
+import { usePrefRemota } from './socket.tsx';
 
 /** 24 columnas: permite mitades, tercios y la partición 58/42 de la referencia sin decimales. */
 export const COLUMNAS = 24;
@@ -178,87 +182,73 @@ const conocido = (id: unknown): id is IdTarjeta =>
 export const POR_DEFECTO_VISIBLES = TODAS.slice(0, 6);
 const POR_DEFECTO = (id: IdTarjeta): Caja => infoTarjeta(id).caja;
 
-/** Ignora ids desconocidos: si una tarjeta desaparece del código, la preferencia no rompe. */
-function leerVisibles(): IdTarjeta[] {
+/**
+ * Los `leer*` validan un valor ya parseado, venga de localStorage o del servidor: la misma
+ * criba vale para los dos, y así una preferencia vieja o manipulada no rompe el tablero.
+ */
+function objeto(crudo: unknown): Record<string, unknown> {
+  return crudo && typeof crudo === 'object' && !Array.isArray(crudo) ? (crudo as Record<string, unknown>) : {};
+}
+
+/** Lee y parsea una clave de localStorage. Un valor ausente o corrupto no existe. */
+function deLS(clave: string): unknown {
   try {
-    const guardado = localStorage.getItem(CLAVE);
-    if (!guardado) return POR_DEFECTO_VISIBLES;
-    const ids = JSON.parse(guardado) as unknown;
-    if (!Array.isArray(ids)) return POR_DEFECTO_VISIBLES;
-    // Orden del catálogo para las fijas y detrás los contadores, como se crearon.
-    return [...TODAS.filter((id) => ids.includes(id)), ...ids.filter(esContador)] as IdTarjeta[];
+    const v = localStorage.getItem(clave);
+    return v === null ? undefined : (JSON.parse(v) as unknown);
   } catch {
-    return POR_DEFECTO_VISIBLES;
+    return undefined;
   }
+}
+
+/** Ignora ids desconocidos: si una tarjeta desaparece del código, la preferencia no rompe. */
+function leerVisibles(crudo: unknown): IdTarjeta[] {
+  if (!Array.isArray(crudo)) return POR_DEFECTO_VISIBLES;
+  // Orden del catálogo para las fijas y detrás los contadores, como se crearon.
+  return [...TODAS.filter((id) => crudo.includes(id)), ...crudo.filter(esContador)] as IdTarjeta[];
 }
 
 /** Igual con las cajas, y además descarta las mal formadas: una preferencia vieja no rompe. */
-function leerCajas(): Partial<Record<IdTarjeta, Caja>> {
-  try {
-    const guardado = localStorage.getItem(CLAVE_CAJAS);
-    if (!guardado) return {};
-    const crudo = JSON.parse(guardado) as Record<string, Partial<Caja> | undefined>;
-    const cajas: Partial<Record<IdTarjeta, Caja>> = {};
-    for (const [id, c] of Object.entries(crudo ?? {})) {
-      if (!c || !conocido(id)) continue;
-      const nums = [c.x, c.y, c.w, c.h];
-      if (nums.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)) cajas[id] = c as Caja;
-    }
-    return cajas;
-  } catch {
-    return {};
+function leerCajas(crudo: unknown): Partial<Record<IdTarjeta, Caja>> {
+  const cajas: Partial<Record<IdTarjeta, Caja>> = {};
+  for (const [id, valor] of Object.entries(objeto(crudo))) {
+    const c = valor as Partial<Caja> | undefined;
+    if (!c || !conocido(id)) continue;
+    const nums = [c.x, c.y, c.w, c.h];
+    if (nums.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= 0)) cajas[id] = c as Caja;
   }
+  return cajas;
 }
 
 /** Igual que el resto: un valor desconocido (versión vieja, usuario curioso) cae al de fábrica. */
-function leerTemaRadar(): TemaRadar {
-  try {
-    const v = localStorage.getItem(CLAVE_RADAR);
-    return TEMAS_RADAR.some((t) => t.valor === v) ? (v as TemaRadar) : 'estado';
-  } catch {
-    return 'estado';
-  }
+function leerTemaRadar(crudo: unknown): TemaRadar {
+  return TEMAS_RADAR.some((t) => t.valor === crudo) ? (crudo as TemaRadar) : 'estado';
 }
 
 /** Igual: una métrica que ya no exista en el catálogo cae en la primera (lo hace `metrica`). */
-function leerMetricas(): Record<string, IdMetrica> {
-  try {
-    const crudo = JSON.parse(localStorage.getItem(CLAVE_METRICAS) ?? '{}') as Record<string, string>;
-    return Object.fromEntries(
-      Object.entries(crudo ?? {})
-        .filter(([id]) => esContador(id))
-        .map(([id, m]) => [id, metrica(m as IdMetrica).valor]),
-    );
-  } catch {
-    return {};
-  }
+function leerMetricas(crudo: unknown): Record<string, IdMetrica> {
+  return Object.fromEntries(
+    Object.entries(objeto(crudo))
+      .filter(([id]) => esContador(id))
+      .map(([id, m]) => [id, metrica(m as IdMetrica).valor]),
+  );
 }
 
 /** Ventana de los widgets de actividad del motor, por id. Lo que no esté aquí va "en vivo". */
-function leerAlcances(): Record<string, Alcance> {
-  try {
-    const crudo = JSON.parse(localStorage.getItem(CLAVE_ALCANCES) ?? '{}') as Record<string, unknown>;
-    return Object.fromEntries(Object.entries(crudo ?? {}).filter(([, a]) => esAlcance(a))) as Record<string, Alcance>;
-  } catch {
-    return {};
-  }
+function leerAlcances(crudo: unknown): Record<string, Alcance> {
+  return Object.fromEntries(Object.entries(objeto(crudo)).filter(([, a]) => esAlcance(a))) as Record<string, Alcance>;
 }
 
 /** Igual: una config mal formada (versión vieja, localStorage tocado a mano) cae a la de fábrica. */
-function leerBarras(): Record<string, ConfigBarras> {
-  try {
-    const crudo = JSON.parse(localStorage.getItem(CLAVE_BARRAS) ?? '{}') as Record<string, Partial<ConfigBarras>>;
-    const validas: Record<string, ConfigBarras> = {};
-    for (const [id, c] of Object.entries(crudo ?? {})) {
-      if (c && SENSORES.includes(c.sensor as Sensor) && typeof c.n === 'number' && c.n > 0) {
-        const modo = MODOS_BARRAS.some((m) => m.valor === c.modo) ? (c.modo as ModoBarras) : 'sensores';
-        validas[id] = { modo, sensor: c.sensor as Sensor, n: c.n };
-      }
+function leerBarras(crudo: unknown): Record<string, ConfigBarras> {
+  const validas: Record<string, ConfigBarras> = {};
+  for (const [id, valor] of Object.entries(objeto(crudo))) {
+    const c = valor as Partial<ConfigBarras> | undefined;
+    if (c && SENSORES.includes(c.sensor as Sensor) && typeof c.n === 'number' && c.n > 0) {
+      const modo = MODOS_BARRAS.some((m) => m.valor === c.modo) ? (c.modo as ModoBarras) : 'sensores';
+      validas[id] = { modo, sensor: c.sensor as Sensor, n: c.n };
     }
-    return validas;
-  } catch {
-    return {};
   }
+  return validas;
 }
 
 interface ValorPanel {
@@ -314,12 +304,13 @@ const Contexto = createContext<ValorPanel>({
 export const usePanelTarjetas = () => useContext(Contexto);
 
 export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
-  const [visibles, setVisibles] = useState<IdTarjeta[]>(leerVisibles);
-  const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(leerCajas);
-  const [temaRadar, setTemaRadar] = useState<TemaRadar>(leerTemaRadar);
-  const [metricas, setMetricas] = useState<Record<string, IdMetrica>>(leerMetricas);
-  const [alcances, setAlcances] = useState<Record<string, Alcance>>(leerAlcances);
-  const [barras, setBarras] = useState<Record<string, ConfigBarras>>(leerBarras);
+  const [visibles, setVisibles] = useState<IdTarjeta[]>(() => leerVisibles(deLS(CLAVE)));
+  const [cajas, setCajas] = useState<Partial<Record<IdTarjeta, Caja>>>(() => leerCajas(deLS(CLAVE_CAJAS)));
+  // El tema del radar se guarda como cadena pelada, no como JSON: se lee tal cual.
+  const [temaRadar, setTemaRadar] = useState<TemaRadar>(() => leerTemaRadar(localStorage.getItem(CLAVE_RADAR)));
+  const [metricas, setMetricas] = useState<Record<string, IdMetrica>>(() => leerMetricas(deLS(CLAVE_METRICAS)));
+  const [alcances, setAlcances] = useState<Record<string, Alcance>>(() => leerAlcances(deLS(CLAVE_ALCANCES)));
+  const [barras, setBarras] = useState<Record<string, ConfigBarras>>(() => leerBarras(deLS(CLAVE_BARRAS)));
 
   useEffect(() => {
     try {
@@ -333,6 +324,31 @@ export function ProveedorPanelTarjetas({ children }: { children: ReactNode }) {
       /* navegación privada: la preferencia solo dura la sesión */
     }
   }, [visibles, cajas, temaRadar, metricas, alcances, barras]);
+
+  /**
+   * Todo el panel en una sola preferencia de cuenta: mover una tarjeta y cambiar la métrica de
+   * un contador son el mismo tipo de cambio y viajan juntos, en vez de seis claves que podrían
+   * llegar desparejadas y dejar un contador sin su caja.
+   */
+  const serializado = useMemo(
+    () => JSON.stringify({ visibles, cajas, temaRadar, metricas, alcances, barras }),
+    [visibles, cajas, temaRadar, metricas, alcances, barras],
+  );
+  usePrefRemota('panel', serializado, (crudo) => {
+    let p: unknown;
+    try {
+      p = JSON.parse(crudo);
+    } catch {
+      return; // preferencia ilegible: se queda la de este navegador
+    }
+    const { visibles: v, cajas: c, temaRadar: tr, metricas: m, alcances: a, barras: b } = objeto(p);
+    setVisibles(leerVisibles(v));
+    setCajas(leerCajas(c));
+    setTemaRadar(leerTemaRadar(tr));
+    setMetricas(leerMetricas(m));
+    setAlcances(leerAlcances(a));
+    setBarras(leerBarras(b));
+  });
 
   const alternar = useCallback((id: IdTarjeta) => {
     setVisibles((xs) =>

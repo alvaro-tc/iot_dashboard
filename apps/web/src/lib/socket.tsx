@@ -14,10 +14,12 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Configuracion, Lectura } from '@iot/shared';
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_URL, tokenStore } from './api.ts';
 import { useAuth } from './auth.tsx';
+import { decidir, type Entrada } from './prefs.ts';
 
 export type EstadoSocket = 'conectando' | 'conectado' | 'reconectando' | 'sin-conexion';
 
@@ -44,6 +46,13 @@ interface ValorSocket {
   desfaseReloj: () => number;
   suscribirTelemetria: (fn: OyenteTelemetria) => () => void;
   actualizarConfig: (cambio: Partial<Configuracion>) => Promise<{ ok: boolean; error?: string }>;
+  /**
+   * Preferencias de interfaz de la cuenta (tema, panel), con la hora de su última edición.
+   * `null` mientras no han llegado: hasta entonces nadie publica nada, para no pisar con el
+   * estado de este navegador lo que la cuenta ya tenga guardado.
+   */
+  prefs: Record<string, Entrada> | null;
+  guardarPref: (clave: string, entrada: Entrada) => void;
 }
 
 const ContextoSocket = createContext<ValorSocket>(null!);
@@ -53,11 +62,13 @@ const MAX_HISTORIAL = 600; // ~5 min a 2 Hz: suficiente para las gráficas en vi
 
 export function ProveedorSocket({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const qc = useQueryClient();
   const [estado, setEstado] = useState<EstadoSocket>('conectando');
   const [idConexion, setIdConexion] = useState(0);
   const [robotId, setRobotId] = useState<string | null>(null);
   const [config, setConfig] = useState<Configuracion | null>(null);
   const [estadoRobot, setEstadoRobot] = useState<EstadoRobot | null>(null);
+  const [prefs, setPrefs] = useState<Record<string, Entrada> | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const historialRef = useRef<Lectura[]>([]);
@@ -115,15 +126,35 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
       oyentesTel.current.forEach((fn) => fn(l));
     });
     socket.on('config', (c: Configuracion) => setConfig(c));
+    // Al conectar llegan todas; después, solo la que acaba de cambiar en otro dispositivo.
+    socket.on('preferencias', (p: Record<string, Entrada>) => setPrefs(p ?? {}));
+    socket.on('pref', ({ clave, valor, ts }: { clave: string } & Entrada) =>
+      setPrefs((prev) => ({ ...(prev ?? {}), [clave]: { valor, ts } })),
+    );
     socket.on('estado', (e: EstadoRobot) => setEstadoRobot(e));
+
+    // Lo que cambia en Postgres llega ya calculado y se mete en la caché de react-query:
+    // la vista que lo esté usando se redibuja sin un solo GET. Es lo que mantiene vivas las
+    // listas (robots, sesiones, usuarios, resúmenes) sin recargar la página ni sondear.
+    socket.on('datos', ({ clave, valor }: { clave: unknown[]; valor: unknown }) => {
+      qc.setQueryData(clave, valor);
+    });
+
+    // Y lo que el servidor no puede recalcular por su cuenta (el histórico y la actividad por
+    // motor dependen del rango abierto aquí) se marca como obsoleto y react-query lo repide.
+    socket.on('invalidar', (claves: string[]) => {
+      for (const clave of claves) void qc.invalidateQueries({ queryKey: [clave] });
+    });
 
     return () => {
       socket.close();
       socketRef.current = null;
       historialRef.current = [];
       setIdConexion(0);
+      // Otra cuenta son otras preferencias: no se heredan las de la anterior.
+      setPrefs(null);
     };
-  }, [user?.id, logout, unirse]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.id, logout, unirse, qc]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cambio de robot: salir de la sala anterior y entrar en la nueva.
   const anteriorRef = useRef<string | null>(null);
@@ -153,6 +184,16 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
         oyentesTel.current.add(fn);
         return () => void oyentesTel.current.delete(fn);
       },
+      prefs,
+      guardarPref: (clave, entrada) => {
+        setPrefs((prev) => ({ ...(prev ?? {}), [clave]: entrada }));
+        // El servidor solo guarda si su copia es más vieja. Si gana la suya, la devuelve en el
+        // ack y es la que vale: se mete en `prefs` y `usePrefRemota` la aplica.
+        socketRef.current?.emit('guardar_pref', { clave, ...entrada }, (r: { ok: boolean } & Partial<Entrada>) => {
+          if (r?.ok || typeof r?.valor !== 'string' || typeof r.ts !== 'number') return;
+          setPrefs((prev) => ({ ...(prev ?? {}), [clave]: { valor: r.valor as string, ts: r.ts as number } }));
+        });
+      },
       actualizarConfig: (cambio) =>
         new Promise((resolve) => {
           const socket = socketRef.current;
@@ -163,7 +204,7 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
           });
         }),
     }),
-    [estado, idConexion, robotId, config, estadoRobot],
+    [estado, idConexion, robotId, config, estadoRobot, prefs],
   );
 
   return <ContextoSocket.Provider value={valor}>{children}</ContextoSocket.Provider>;
@@ -197,4 +238,55 @@ export function useUltimaLectura(hz = 2): Lectura | null {
 
   useEffect(() => forzar((n) => n + 1), [idConexion]);
   return ultima();
+}
+
+/**
+ * Hora de la última edición de una preferencia en ESTE navegador. Se guarda aparte del valor
+ * porque tiene que sobrevivir a cerrar el navegador: si no, al volver a abrir no se sabría si
+ * lo de aquí es más nuevo o más viejo que lo de la cuenta, y lo rancio podría ganar.
+ */
+const CLAVE_TS = (clave: string) => `pref-ts:${clave}`;
+const tsGuardado = (clave: string) => {
+  try {
+    return Number(localStorage.getItem(CLAVE_TS(clave))) || 0;
+  } catch {
+    return 0;
+  }
+};
+const guardarTs = (clave: string, ts: number) => {
+  try {
+    localStorage.setItem(CLAVE_TS(clave), String(ts));
+  } catch {
+    /* sin almacenamiento: la hora se pierde al recargar y la cuenta gana los empates */
+  }
+};
+
+/**
+ * Ata una preferencia de la cuenta a un estado local: sube `valor` al servidor cuando cambia
+ * aquí y llama a `aplicar` con el que llegue de otro dispositivo (o con el guardado, al
+ * conectar). `valor` es la cadena serializada, la misma que va a localStorage, así que
+ * comparar por igualdad basta para saber si hay cambio real. Quién gana lo decide `decidir`.
+ */
+export function usePrefRemota(clave: string, valor: string, aplicar: (crudo: string) => void): void {
+  const { prefs, guardarPref, desfaseReloj } = useSocket();
+  const aplicarRef = useRef(aplicar);
+  aplicarRef.current = aplicar;
+
+  // Lo último acordado con el servidor: lo que corta el ciclo aplicar → publicar. Arranca con
+  // lo que ya había en este navegador y la hora en que se editó, que es lo que se compara.
+  const sincronizado = useRef<Entrada | null>(null);
+  sincronizado.current ??= { valor, ts: tsGuardado(clave) };
+
+  const remoto = prefs?.[clave];
+  useEffect(() => {
+    // Reloj del servidor: el del navegador puede ir descuadrado y las horas se comparan
+    // entre dispositivos.
+    const d = decidir(remoto, valor, sincronizado.current!, prefs !== null, Date.now() - desfaseReloj());
+    if (d.sincronizado !== undefined) {
+      sincronizado.current = d.sincronizado;
+      guardarTs(clave, d.sincronizado.ts);
+    }
+    if (d.aplicar !== undefined) aplicarRef.current(d.aplicar);
+    if (d.publicar !== undefined) guardarPref(clave, d.publicar);
+  }, [remoto, valor, prefs, clave, guardarPref, desfaseReloj]);
 }

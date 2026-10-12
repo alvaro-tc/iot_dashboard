@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { requireAuth, signToken } from '../auth.ts';
 import { pool } from '../db.ts';
 import { HttpError, isUniqueViolation, parse } from '../http.ts';
+import { emitirCambio } from '../ws.ts';
 
 export const passwordSchema = z
   .string({ required_error: 'Escribe una contraseña.' })
@@ -45,6 +46,7 @@ authRouter.post('/auth/signup', async (req, res) => {
       `INSERT INTO usuarios (correo, contrasena, nombre, rol) VALUES ($1, $2, $3, 'cliente') RETURNING ${USER_COLUMNS}`,
       [body.email, hash, body.name],
     );
+    emitirCambio(['admin-users', 'admin-resumen']); // la lista de usuarios del admin, al día
     res.status(201).json({ token: signToken(rows[0]), user: rows[0] });
   } catch (e) {
     if (isUniqueViolation(e)) throw EMAIL_TAKEN;

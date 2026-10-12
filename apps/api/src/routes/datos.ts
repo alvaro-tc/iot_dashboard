@@ -1,17 +1,15 @@
 // Lecturas, sesiones, configuración y estadísticas de un robot.
 //
 // Todo pasa por exigirPropiedad: un usuario solo ve sus robots, un admin los ve todos.
-import { PWM_ACTIVO } from '@iot/shared';
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../auth.ts';
 import { actualizarConfiguracion, configSchema, configuracionDe } from '../configuracion.ts';
+import { resumenDe, sesionesDe } from '../consultas.ts';
 import { pool } from '../db.ts';
 import { HttpError, parse } from '../http.ts';
 import { mqttConectado } from '../mqtt/bridge.ts';
 import { tamanoBuffer } from '../persistencia.ts';
-import { sesionActiva } from '../sesiones.ts';
-import { mensajesPorSegundo } from '../telemetria.ts';
 import { clientesConectados, emitirConfig } from '../ws.ts';
 import { exigirPropiedad } from './dispositivos.ts';
 
@@ -111,23 +109,7 @@ datosRouter.get('/dispositivos/:id/lecturas/export.csv', async (req, res) => {
 
 datosRouter.get('/dispositivos/:id/sesiones', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
-  const { rows } = await pool.query(
-    `SELECT sesion_id AS id, iniciada_en AS "iniciadaEn", finalizada_en AS "finalizadaEn",
-            duracion_s AS "duracionS", total_lecturas AS "lecturas",
-            bateria_inicio_porcentaje AS "bateriaInicioPorcentaje",
-            bateria_fin_porcentaje AS "bateriaFinPorcentaje",
-            bateria_consumida_porcentaje AS "bateriaConsumidaPorcentaje",
-            lecturas_en_marcha AS "lecturasEnMarcha", lecturas_detenido AS "lecturasDetenido",
-            prom_pwm_izquierda AS "promPwmIzquierda", prom_pwm_derecha AS "promPwmDerecha",
-            min_izquierda_cm AS "minIzquierdaCm", min_central_cm AS "minCentralCm",
-            min_derecha_cm AS "minDerechaCm",
-            cerca_izquierda AS "cercaIzquierda", cerca_central AS "cercaCentral",
-            cerca_derecha AS "cercaDerecha"
-     FROM v_resumen_sesion WHERE dispositivo_id = $1
-     ORDER BY (finalizada_en IS NULL) DESC, iniciada_en DESC LIMIT 100`,
-    [req.params.id],
-  );
-  res.json(rows);
+  res.json(await sesionesDe(req.params.id));
 });
 
 /** Comprueba que la sesión existe y que su robot es accesible para quien pregunta. */
@@ -168,57 +150,7 @@ datosRouter.patch('/dispositivos/:id/configuracion', async (req, res) => {
 
 datosRouter.get('/dispositivos/:id/resumen', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
-  const { rows } = await pool.query(
-    `WITH total AS (
-       -- Acumulado de toda la vida del robot, en una sola pasada por sus lecturas. El tiempo
-       -- de cada motor por separado solo se puede contar aqui: la vista de sesion agrega el
-       -- PWM de las dos ruedas juntas.
-       -- ponytail: cuenta todas las lecturas del robot en cada peticion (cada 10 s); si la
-       -- tabla crece a millones, acumular por sesion en v_resumen_sesion.
-       SELECT count(*) FILTER (WHERE abs(movimiento_izquierda) >= $2
-                                  OR abs(movimiento_derecha)   >= $2) AS marcha,
-              count(*) FILTER (WHERE abs(movimiento_izquierda) >= $2) AS izquierda,
-              count(*) FILTER (WHERE abs(movimiento_derecha)   >= $2) AS derecha
-       FROM lecturas WHERE dispositivo_id = $1
-     )
-     SELECT
-       (SELECT coalesce(sum(duracion_s), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "segundosHoy",
-       (SELECT coalesce(sum(lecturas_en_marcha), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "lecturasEnMarchaHoy",
-       (SELECT coalesce(sum(lecturas_detenido), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "lecturasDetenidoHoy",
-       (SELECT coalesce(sum(cerca_izquierda), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaIzquierda",
-       (SELECT coalesce(sum(cerca_central), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaCentral",
-       (SELECT coalesce(sum(cerca_derecha), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1 AND iniciada_en >= date_trunc('day', now()))      AS "cercaDerecha",
-       (SELECT bateria_porcentaje FROM lecturas WHERE dispositivo_id = $1
-         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaPorcentaje",
-       (SELECT bateria_voltios FROM lecturas WHERE dispositivo_id = $1
-         ORDER BY creado_en DESC LIMIT 1)                                            AS "bateriaVoltios",
-       (SELECT coalesce(sum(duracion_s), 0) FROM v_resumen_sesion
-         WHERE dispositivo_id = $1)                                                 AS "segundosTotal",
-       total.marcha                                                                 AS "lecturasEnMarchaTotal",
-       total.izquierda                                                              AS "lecturasMarchaIzquierdaTotal",
-       total.derecha                                                                AS "lecturasMarchaDerechaTotal"
-     FROM total`,
-    [req.params.id, PWM_ACTIVO],
-  );
-
-  const sesion = sesionActiva(req.params.id);
-  res.json({
-    ...rows[0],
-    mensajesPorSegundo: mensajesPorSegundo(req.params.id),
-    sesion: sesion && {
-      id: sesion.id,
-      iniciadaEn: sesion.iniciadaEn,
-      lecturas: sesion.totalLecturas,
-      bateriaInicioPorcentaje: sesion.bateriaInicioPorcentaje,
-      bateriaPorcentaje: sesion.bateriaUltimaPorcentaje,
-    },
-  });
+  res.json(await resumenDe(req.params.id));
 });
 
 datosRouter.get('/salud', async (_req, res) => {

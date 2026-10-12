@@ -69,11 +69,11 @@ function Inicio() {
 export function App() {
   return (
     <BrowserRouter>
-      <ProveedorTema>
         <QueryClientProvider client={queryClient}>
           <ToastProvider>
             <AuthProvider>
               <ProveedorSocket>
+               <ProveedorTema>
                 <ProveedorRobots>
                  <ProveedorPanelTarjetas>
                   <ProveedorConfirmar>
@@ -100,11 +100,11 @@ export function App() {
                   </ProveedorConfirmar>
                  </ProveedorPanelTarjetas>
                 </ProveedorRobots>
+               </ProveedorTema>
               </ProveedorSocket>
             </AuthProvider>
           </ToastProvider>
         </QueryClientProvider>
-      </ProveedorTema>
     </BrowserRouter>
   );
 }

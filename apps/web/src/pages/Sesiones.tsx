@@ -118,7 +118,7 @@ export function Sesiones() {
   return (
     <div className="grid gap-4 xl:grid-cols-[320px_1fr]">
       <Tarjeta titulo="Sesiones" subtitulo={`${lista.length} en total`}>
-        <ul className="max-h-[540px] divide-y divide-borde overflow-y-auto">
+        <ul className="max-h-[240px] divide-y divide-borde overflow-y-auto xl:max-h-[540px]">
           {lista.map((s) => (
             <li key={s.id}>
               <button
@@ -170,12 +170,12 @@ export function Sesiones() {
 
           <div className="grid gap-4 md:grid-cols-2">
             <Tarjeta titulo="Marcha y parada" subtitulo="Reparto de las lecturas">
-              <div className="h-[240px]">
+              <div className="h-[200px] sm:h-[240px]">
                 <DonaMarcha s={actual} />
               </div>
             </Tarjeta>
             <Tarjeta titulo="Obstáculos por sensor" subtitulo="Lecturas a 15 cm o menos">
-              <div className="h-[240px]">
+              <div className="h-[200px] sm:h-[240px]">
                 <BarrasObstaculos s={actual} />
               </div>
             </Tarjeta>

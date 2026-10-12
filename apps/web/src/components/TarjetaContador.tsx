@@ -12,14 +12,13 @@ import { useSocket, useUltimaLectura } from '../lib/socket.tsx';
 import type { Resumen } from '../lib/types.ts';
 import { Tarjeta } from './ui.tsx';
 
-/** El resumen del robot, refrescado cada 10 s. Compartido por el panel y los contadores. */
+/** El resumen del robot, que llega empujado por el socket. Compartido por el panel y los contadores. */
 export function useResumen() {
   const { robotId } = useSocket();
   return useQuery<Resumen>({
     queryKey: ['resumen', robotId],
     queryFn: () => api(`/api/dispositivos/${robotId}/resumen`),
     enabled: !!robotId,
-    refetchInterval: 10_000,
   });
 }
 

@@ -9,7 +9,6 @@ export function RobotsAdmin() {
   const { data, isLoading } = useQuery<Dispositivo[]>({
     queryKey: ['admin-robots'],
     queryFn: () => api('/api/admin/robots'),
-    refetchInterval: 20_000,
   });
 
   if (isLoading) return <Esqueleto className="h-80" />;
@@ -19,7 +18,7 @@ export function RobotsAdmin() {
       {!data?.length ? (
         <Vacio titulo="Sin robots" descripcion="Ningún usuario ha dado de alta un robot todavía." />
       ) : (
-        <div className="overflow-x-auto">
+        <div className="tabla-scroll">
           <table className="tabla">
             <thead>
               <tr>

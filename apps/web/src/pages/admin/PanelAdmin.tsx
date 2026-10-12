@@ -36,7 +36,6 @@ export function PanelAdmin() {
   const { data, isLoading } = useQuery<ResumenAdmin>({
     queryKey: ['admin-resumen'],
     queryFn: () => api('/api/admin/resumen'),
-    refetchInterval: 15_000,
   });
 
   if (isLoading || !data) return <Esqueleto className="h-60" />;
@@ -59,7 +58,7 @@ export function PanelAdmin() {
         {!data.sesionesEnCurso.length ? (
           <Vacio titulo="Ningún robot en marcha" descripcion="Cuando alguno pase a automático aparecerá aquí." />
         ) : (
-          <div className="overflow-x-auto">
+          <div className="tabla-scroll">
             <table className="tabla">
               <thead>
                 <tr>

@@ -59,7 +59,6 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
     queryFn: () =>
       api(`/api/dispositivos/${robotId}/lecturas?agregacion=${AGREGACION[alcance as 'hoy' | 'total']}&desde=${desdeDe(alcance)}`),
     enabled: !!robotId && !envivo,
-    refetchInterval: 30_000,
   });
 
   const lecturas = historial();

@@ -97,8 +97,8 @@ export function BarraSuperior() {
   }, [abierto]);
 
   return (
-    <div ref={contenedor} className="sticky top-0 z-20 px-4 pt-4 pb-2 sm:px-6">
-      <div className="flex items-center gap-2 rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta px-3 py-2.5 shadow-[0_1px_2px_rgba(28,25,23,0.04)] sm:gap-3 sm:px-4">
+    <div ref={contenedor} className="sticky top-0 z-20 px-3 pt-3 pb-2 sm:px-6 sm:pt-4">
+      <div className="flex items-center gap-1 rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta px-2 py-2 shadow-[0_1px_2px_rgba(28,25,23,0.04)] sm:gap-3 sm:px-4 sm:py-2.5">
         {/* Selector del robot activo */}
         <div className="relative min-w-0 flex-1">
           <button
@@ -108,21 +108,23 @@ export function BarraSuperior() {
             className="flex max-w-full cursor-pointer items-center gap-2 rounded-full px-2 py-1.5 hover:bg-tarjeta-tenue"
             onClick={() => setAbierto(abierto === 'robot' ? null : 'robot')}
           >
-            <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-acento/15 text-acento">
+            <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-acento/15 text-acento sm:size-9">
               <Bot className="size-5" />
             </span>
             <span className="min-w-0 text-left">
-              <span className="block max-w-[180px] truncate text-[14px] font-medium">
+              <span className="block max-w-[34vw] truncate text-[14px] font-medium sm:max-w-[180px]">
                 {robot?.nombre ?? 'Sin robots'}
               </span>
               {robot && (
-                <span className="block max-w-[180px] truncate text-[12px] text-tinta-suave">{robot.ubicacion}</span>
+                <span className="block max-w-[34vw] truncate text-[12px] text-tinta-suave sm:max-w-[180px]">
+                  {robot.ubicacion}
+                </span>
               )}
             </span>
             <ChevronDown className="size-4 shrink-0 text-tinta-suave" />
           </button>
           {abierto === 'robot' && (
-            <div className="absolute top-12 left-0 z-30 w-72 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
+            <div className="absolute top-12 -left-1 z-30 w-72 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
               <ul className="max-h-80 overflow-y-auto">
                 {robots.map((r) => (
                   <li key={r.id}>
@@ -178,7 +180,7 @@ export function BarraSuperior() {
             {sinLeer > 0 && <span className="absolute top-2 right-2 size-2 rounded-full bg-evasion" />}
           </button>
           {abierto === 'campana' && (
-            <div className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
+            <div className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
               <p className="border-b border-borde px-4 py-3 text-[14px] font-semibold">Notificaciones</p>
               {notificaciones.length === 0 ? (
                 <p className="px-4 py-6 text-center text-[13px] text-tinta-suave">Nada por ahora.</p>
@@ -197,14 +199,25 @@ export function BarraSuperior() {
           )}
         </div>
 
-        {/* Toggle de tema: píldora con luna y sol, como en la referencia */}
+        {/* Tema. La píldora de dos estados ocupa ~80 px: en el Fold plegado eso es un cuarto de
+            la barra, así que ahí se queda en un botón de un solo icono que alterna igual. */}
         <button
           type="button"
           role="switch"
           aria-checked={tema === 'oscuro'}
           aria-label="Tema oscuro"
           onClick={alternar}
-          className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full bg-tarjeta-tenue p-1"
+          className="btn-fantasma inline-flex size-10 shrink-0 cursor-pointer items-center justify-center rounded-full xs:hidden"
+        >
+          {tema === 'oscuro' ? <Sun className="size-5" /> : <Moon className="size-5" />}
+        </button>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={tema === 'oscuro'}
+          aria-label="Tema oscuro"
+          onClick={alternar}
+          className="hidden shrink-0 cursor-pointer items-center gap-1 rounded-full bg-tarjeta-tenue p-1 xs:inline-flex"
         >
           <span
             className={`inline-flex size-8 items-center justify-center rounded-full transition-colors duration-150 ${
@@ -231,7 +244,7 @@ export function BarraSuperior() {
             className="flex cursor-pointer items-center gap-2 rounded-full p-1 hover:bg-tarjeta-tenue"
             onClick={() => setAbierto(abierto === 'usuario' ? null : 'usuario')}
           >
-            <span className="inline-flex size-9 items-center justify-center rounded-full bg-acento/15 text-[14px] font-semibold text-acento">
+            <span className="inline-flex size-8 items-center justify-center rounded-full bg-acento/15 text-[14px] font-semibold text-acento sm:size-9">
               {user!.name.slice(0, 1).toUpperCase()}
             </span>
             <span className="hidden min-w-0 text-left lg:block">
@@ -241,7 +254,7 @@ export function BarraSuperior() {
             <ChevronDown className="hidden size-4 text-tinta-suave lg:block" />
           </button>
           {abierto === 'usuario' && (
-            <div className="absolute right-0 z-30 mt-2 w-56 overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
+            <div className="absolute right-0 z-30 mt-2 w-56 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
               <div className="border-b border-borde px-4 py-3">
                 <p className="truncate text-[14px] font-medium">{user!.name}</p>
                 <p className="truncate text-[12px] text-tinta-suave">{user!.email}</p>

@@ -7,10 +7,12 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "build": "tsc --noEmit",
-    "lint": "tsc --noEmit",
+    "check:prefs": "tsx src/preferencias.check.ts",
+    "lint": "tsc --noEmit && tsx src/token-robot.check.ts && tsx src/ws.check.ts",
     "db:reset": "tsx db/reset.ts",
     "db:vistas": "tsx db/vistas.ts",
-    "db:seed-admin": "tsx db/seed-admin.ts"
+    "db:seed-admin": "tsx db/seed-admin.ts",
+    "check": "tsx src/token-robot.check.ts"
   },
   "dependencies": {
     "@iot/shared": "workspace:*",

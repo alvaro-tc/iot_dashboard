@@ -5,7 +5,7 @@
 -- usa el firmware del ESP32 en `firmware/`, para que el JSON que publica el robot se pueda
 -- guardar sin traducir nada por el camino.
 DROP VIEW IF EXISTS v_resumen_sesion, v_lecturas_por_hora, v_lecturas_por_minuto CASCADE;
-DROP TABLE IF EXISTS lecturas, sesiones, configuracion_dispositivo, dispositivos, usuarios CASCADE;
+DROP TABLE IF EXISTS lecturas, sesiones, configuracion_dispositivo, preferencias_usuario, dispositivos, usuarios CASCADE;
 -- Restos de esquemas anteriores, por si la base viene de un despliegue viejo.
 DROP FUNCTION IF EXISTS obtener_mapa_sesion(BIGINT, INTEGER) CASCADE;
 DROP TABLE IF EXISTS eventos, users, samples, runs, devices CASCADE;
@@ -20,13 +20,23 @@ CREATE TABLE usuarios (
   creado_en   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Preferencias de interfaz del usuario: tema y panel (qué widgets, dónde y con qué ajustes).
+-- Para la base es un JSONB opaco: lo escribe y lo valida el navegador. Vive en la cuenta, no
+-- en el navegador, para que la misma cuenta vea lo mismo en cualquier dispositivo.
+CREATE TABLE preferencias_usuario (
+  usuario_id     INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+  datos          JSONB NOT NULL DEFAULT '{}',
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- Un robot. El id es además el usuario MQTT: la ACL de Mosquitto lo ata a roomba/{id}/#.
 CREATE TABLE dispositivos (
   id                TEXT PRIMARY KEY,                -- ej. 'roomba-7f3a9c2b'
   usuario_id        INTEGER NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
   nombre            TEXT NOT NULL,                   -- ej. 'Roomba Sala'
   ubicacion         TEXT NOT NULL DEFAULT '',
-  token_hash        TEXT NOT NULL,                   -- hash bcrypt del token MQTT
+  token_hash        TEXT NOT NULL,                   -- hash bcrypt del token MQTT (valida /api/ingesta)
+  token_cifrado     TEXT,                            -- el mismo token con AES-256-GCM, para poder volver a mostrarlo
   revocado          BOOLEAN NOT NULL DEFAULT false,
   en_linea          BOOLEAN NOT NULL DEFAULT false,
   ultimo_contacto   TIMESTAMPTZ,

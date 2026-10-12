@@ -20,7 +20,6 @@ export function TarjetaSesiones() {
     queryKey: ['sesiones', robot?.id],
     queryFn: () => api(`/api/dispositivos/${robot!.id}/sesiones`),
     enabled: !!robot,
-    refetchInterval: 30_000,
   });
 
   if (isLoading) {

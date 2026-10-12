@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { RobotSimulado, bateriaPorcentaje, type Configuracion } from '@iot/shared';
 import { pool } from '../src/db.ts';
 import { addDevice, syncBroker } from '../src/mqtt/broker-credentials.ts';
+import { cifrarToken } from '../src/token-robot.ts';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const PASO_MS = 50; // bucle de control, igual que el firmware
@@ -105,10 +106,17 @@ try {
   c.release();
 }
 
+const demo = [
+  ['roomba-sala', 'SalaDemoToken0123456789abcdefgh'],
+  ['roomba-cocina', 'CocinaDemoToken0123456789abcdef'],
+  ['roomba-maria', 'MariaDemoToken0123456789abcdefg'],
+];
 try {
-  await addDevice('roomba-sala', 'SalaDemoToken0123456789abcdefgh');
-  await addDevice('roomba-cocina', 'CocinaDemoToken0123456789abcdef');
-  await addDevice('roomba-maria', 'MariaDemoToken0123456789abcdefg');
+  for (const [id, token] of demo) {
+    // El seed solo pone el hash bcrypt; aquí se guarda además cifrado para poder mostrarlo.
+    await pool.query('UPDATE dispositivos SET token_cifrado = $2 WHERE id = $1', [id, cifrarToken(token)]);
+    await addDevice(id, token);
+  }
   await syncBroker(); // usuario de servicio + limpia passwd/acl de robots que ya no existen
   console.log('broker: credenciales de demo registradas');
 } catch (e) {

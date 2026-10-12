@@ -32,6 +32,10 @@
   --font-sans: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
 
   --radius-tarjeta: 1.5rem;
+
+  /* Pantalla plegada del Galaxy Fold y similares: ~340-390 px. Por debajo de `xs` caben
+     etiquetas de una palabra y poco más, así que las variantes crecen a partir de aquí. */
+  --breakpoint-xs: 25rem;
 }
 
 /* Tema oscuro: mismo naranja, fondos fríos y degradados desaturados. */
@@ -57,6 +61,8 @@ body {
   color: var(--color-tinta);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  /* Android/iOS reescalan el texto al girar el móvil si no se fija. */
+  -webkit-text-size-adjust: 100%;
 }
 
 :focus-visible {
@@ -103,7 +109,8 @@ body {
 @layer components {
   /* ---------- Tarjetas ---------- */
   .tarjeta {
-    @apply rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta p-5 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-12px_rgba(28,25,23,0.12)];
+    @apply rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta p-4 shadow-[0_1px_2px_rgba(28,25,23,0.04),0_8px_24px_-12px_rgba(28,25,23,0.12)];
+    @apply sm:p-5;
     animation: aparecer 180ms ease-out both;
     /* Contenedor de consulta: dentro de una tarjeta lo que decide si una etiqueta cabe es el
        ancho de LA TARJETA, no el de la ventana. Con breakpoints de ventana, un widget estrecho
@@ -155,7 +162,8 @@ body {
 
   /* ---------- Formularios ---------- */
   .campo {
-    @apply h-11 w-full rounded-2xl border border-borde bg-tarjeta px-4 text-[15px] text-tinta transition-colors duration-150 placeholder:text-tinta-suave focus:border-acento aria-invalid:border-evasion;
+    /* 16 px en móvil: por debajo, el navegador hace zoom al enfocar el campo. */
+    @apply h-11 w-full rounded-2xl border border-borde bg-tarjeta px-4 text-[16px] text-tinta sm:text-[15px] transition-colors duration-150 placeholder:text-tinta-suave focus:border-acento aria-invalid:border-evasion;
   }
   .etiqueta {
     @apply mb-1.5 block text-[13px] font-medium text-tinta-suave;
@@ -165,6 +173,11 @@ body {
   }
 
   /* ---------- Tablas ---------- */
+  /* Las tablas no se reflowean: en móvil se desplazan en horizontal, y el envoltorio sangra
+     hasta el borde de la tarjeta para que se vea que hay más a la derecha. */
+  .tabla-scroll {
+    @apply -mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5;
+  }
   .tabla {
     @apply w-full border-collapse text-[14px];
   }

@@ -13,7 +13,7 @@ import { datosRouter } from './routes/datos.ts';
 import { dispositivosRouter } from './routes/dispositivos.ts';
 import { ingestaRouter } from './routes/ingesta.ts';
 import { arrancarBarridoInactivas, arrancarVolcadoPeriodico, volcarTodas } from './sesiones.ts';
-import { attachWebSocket } from './ws.ts';
+import { attachWebSocket, emitirCambioRobot } from './ws.ts';
 
 const app = express();
 app.use(cors());
@@ -36,6 +36,16 @@ try {
   process.exit(1);
 }
 
+// Bases creadas antes de que el token se guardara cifrado: la columna se añade al arrancar.
+await pool.query('ALTER TABLE dispositivos ADD COLUMN IF NOT EXISTS token_cifrado TEXT');
+
+// Bases creadas antes de que el tema y el panel se guardaran en la cuenta.
+await pool.query(`CREATE TABLE IF NOT EXISTS preferencias_usuario (
+  usuario_id     INTEGER PRIMARY KEY REFERENCES usuarios(id) ON DELETE CASCADE,
+  datos          JSONB NOT NULL DEFAULT '{}',
+  actualizado_en TIMESTAMPTZ NOT NULL DEFAULT now()
+)`);
+
 // Antes de conectar el puente: asegura que el usuario de servicio existe en passwd y la ACL está al día.
 await syncBroker().catch((e) =>
   console.warn(`[broker] no se pudo sincronizar Mosquitto (${e.message}). El puente seguirá reintentando.`),
@@ -46,7 +56,10 @@ attachWebSocket(server);
 startBridge();
 arrancarPersistencia();
 arrancarVolcadoPeriodico();
-arrancarBarridoInactivas(env.SESION_INACTIVA_MS, (id) => console.log(`[sesiones] cerrada por inactividad: ${id}`));
+arrancarBarridoInactivas(env.SESION_INACTIVA_MS, (id) => {
+  console.log(`[sesiones] cerrada por inactividad: ${id}`);
+  void emitirCambioRobot(id, ['sesiones', 'resumen', 'dispositivos', 'admin-resumen']);
+});
 await reenviarPendientes();
 
 server.listen(env.PORT, () => console.log(`[api] http://localhost:${env.PORT}  ws://localhost:${env.PORT}/live`));

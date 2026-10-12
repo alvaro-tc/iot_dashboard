@@ -4,6 +4,7 @@
 //   ≥1280 px  sidebar fija + barra superior + grilla de 2 columnas
 //   768–1279  sidebar en iconos, grilla de 2 columnas
 //   <768      sin sidebar, nav inferior de 5 iconos, una columna
+//   <400      (Fold plegado) etiquetas más pequeñas y paddings estrechos (variante `xs`)
 import { useState } from 'react';
 import {
   Bot,
@@ -36,7 +37,7 @@ const ENLACES_CLIENTE: Enlace[] = [
   { to: '/sesiones', texto: 'Sesiones', Icono: CalendarClock, movil: true },
   { to: '/historial', texto: 'Historial', Icono: History, movil: true },
   { to: '/robots', texto: 'Robots', Icono: Bot, movil: true },
-  { to: '/perfil', texto: 'Perfil', Icono: UserRound },
+  { to: '/perfil', texto: 'Perfil', Icono: UserRound, movil: true },
 ];
 
 const ENLACES_ADMIN: Enlace[] = [
@@ -133,14 +134,14 @@ export function AppLayout() {
       <BarraSuperior />
 
       {/* pb en móvil: deja sitio a la barra de navegación inferior */}
-      <main className="mx-auto w-full max-w-[1500px] px-4 pb-24 sm:px-6 md:pb-8">
+      <main className="mx-auto w-full max-w-[1500px] px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-8">
         <Outlet />
       </main>
 
       {/* ---- Navegación inferior (<768 px) ---- */}
       <nav
         aria-label="Principal"
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-borde bg-tarjeta md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-borde bg-tarjeta pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         {enMovil.map(({ to, texto, Icono, end }) => (
           <NavLink
@@ -148,13 +149,13 @@ export function AppLayout() {
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex min-h-[56px] flex-1 flex-col items-center justify-center gap-1 text-[11px] ${
+              `flex min-h-[56px] min-w-0 flex-1 flex-col items-center justify-center gap-1 px-0.5 text-[10px] xs:text-[11px] ${
                 isActive ? 'text-acento' : 'text-tinta-suave'
               }`
             }
           >
-            <Icono className="size-5" />
-            {texto}
+            <Icono className="size-5 shrink-0" />
+            <span className="max-w-full truncate">{texto}</span>
           </NavLink>
         ))}
       </nav>

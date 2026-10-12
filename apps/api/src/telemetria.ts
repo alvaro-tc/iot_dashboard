@@ -10,7 +10,7 @@ import { bateriaPorcentaje, PWM_MAX, type Lectura, type TelemetriaMqtt } from '@
 import { z } from 'zod';
 import { encolarLectura } from './persistencia.ts';
 import { abrirSesion, sesionActiva } from './sesiones.ts';
-import { emitirTelemetria } from './ws.ts';
+import { emitirCambioRobot, emitirTelemetria } from './ws.ts';
 
 /** Ventana que se manda a un navegador recién conectado para que el panel no arranque vacío. */
 const HISTORIAL_EN_MEMORIA = 50;
@@ -34,14 +34,25 @@ interface EstadoRobot {
   historial: Lectura[];
   /** Mensajes del último segundo, para el indicador de msg/s del dashboard. */
   marcas: number[];
+  /** Último aviso de "refresca tus consultas" mandado a los navegadores. */
+  avisadoEn: number;
 }
+
+/**
+ * Cada cuánto se avisa de que los agregados de Postgres (contadores de sesión, resumen,
+ * histórico) han cambiado. Lo que va dato a dato viaja por el evento `telemetria`; esto es
+ * solo para las vistas que leen de la base.
+ * ponytail: 5 s fijos; si se nota el refetch, subirlo o mandar los contadores en el evento.
+ */
+const AVISO_CAMBIO_MS = 5_000;
+const CLAVES_LECTURA = ['resumen', 'sesiones', 'historial', 'actividad-motor', 'dispositivos', 'admin-resumen'];
 
 const estados = new Map<string, EstadoRobot>();
 
 function estadoDe(dispositivoId: string): EstadoRobot {
   let e = estados.get(dispositivoId);
   if (!e) {
-    e = { historial: [], marcas: [] };
+    e = { historial: [], marcas: [], avisadoEn: 0 };
     estados.set(dispositivoId, e);
   }
   return e;
@@ -102,5 +113,11 @@ export async function procesarTelemetria(
 
   // 3. Y por último, la cola de persistencia.
   encolarLectura(l);
+
+  // 4. Las vistas que leen agregados de Postgres se enteran cada AVISO_CAMBIO_MS.
+  if (recibidoEn - e.avisadoEn > AVISO_CAMBIO_MS) {
+    e.avisadoEn = recibidoEn;
+    void emitirCambioRobot(dispositivoId, CLAVES_LECTURA);
+  }
   return l;
 }

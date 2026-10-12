@@ -1,9 +1,12 @@
 // Tema claro/oscuro. La primera vez respeta prefers-color-scheme; a partir de ahí manda
-// la elección guardada en localStorage.
+// la elección guardada, que viaja con la cuenta: cambiarlo en un dispositivo lo cambia en
+// los demás (lo sincroniza `usePrefRemota`). El localStorage sigue siendo el respaldo local,
+// y lo que lee el script de index.html para pintar ya con el tema bueno.
 //
 // El atributo data-tema ya lo pone un script en index.html antes de pintar (evita el
 // parpadeo). Aquí solo se lee y se cambia.
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
+import { usePrefRemota } from './socket.tsx';
 
 type Tema = 'claro' | 'oscuro';
 
@@ -28,6 +31,8 @@ export function ProveedorTema({ children }: { children: ReactNode }) {
       /* navegación privada: el tema simplemente no se recuerda */
     }
   }, [tema]);
+
+  usePrefRemota('tema', tema, (crudo) => setTema(crudo === 'oscuro' ? 'oscuro' : 'claro'));
 
   const alternar = useCallback(() => setTema((t) => (t === 'oscuro' ? 'claro' : 'oscuro')), []);
 

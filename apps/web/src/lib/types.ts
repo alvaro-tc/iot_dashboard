@@ -39,6 +39,13 @@ export interface AltaDispositivo {
   broker: { host: string; port: number };
 }
 
+/** GET /api/dispositivos/:id/credenciales — token = null si no se puede recuperar y hay que regenerarlo. */
+export interface Credenciales {
+  id: string;
+  token: string | null;
+  broker: { host: string; port: number };
+}
+
 /** Una fila de v_resumen_sesion. */
 export interface ResumenSesion {
   id: number;

@@ -55,41 +55,50 @@
 // Portada
 // ---------------------------------------------------------------------------
 #page(numbering: none)[
-  #v(2.5cm)
+  #v(0.6cm)
   #align(center)[
-    #text(size: 12pt, fill: acento, weight: "bold")[INFORME TÉCNICO — PROYECTO IoT]
-    #v(1.2cm)
-    #text(size: 28pt, weight: "bold", fill: tinta)[
-      Roomba: robot aspirador doméstico \ con dashboard IoT en tiempo real
-    ]
-    #v(0.6cm)
-    #text(size: 13pt, fill: rgb("#475569"))[
-      ESP32 + MicroPython · MQTT · PostgreSQL · API REST · React
-    ]
-    #v(3cm)
-    #block(width: 70%)[
-      #line(length: 100%, stroke: 0.5pt + rgb("#E7E2DD"))
-      #v(0.4cm)
-      #grid(
-        columns: (1fr, 1fr),
-        row-gutter: 0.6cm,
-        [*Autor*], [Álvaro],
-        [*Repositorio*], [#text(size: 9.5pt)[#link("https://github.com/alvaro-tc/iot_dashboard")[alvaro-tc/iot\_dashboard]]],
-        [*Despliegue en producción*], [#text(size: 9.5pt)[#link("https://iot-dashboard.tumype.com/")[iot-dashboard.tumype.com]]],
-        [*Fecha del informe*], [12 de octubre de 2026],
-        [*Alcance*], [Movimiento y evasión de obstáculos (sin succión)],
-      )
-      #v(0.4cm)
-      #line(length: 100%, stroke: 0.5pt + rgb("#E7E2DD"))
-    ]
+    #image("assets/ucb_logo.png", width: 58%)
   ]
-  #v(1fr)
+  #v(0.9cm)
   #align(center)[
-    #text(size: 9pt, fill: rgb("#475569"))[
-      Todos los esquemas, tablas, rutas y fragmentos de código citados en este informe
-      provienen del repositorio real del proyecto; donde algo queda pendiente, se indica
-      explícitamente en vez de inventarse.
-    ]
+    #text(size: 15pt, weight: "bold", fill: tinta, tracking: 1pt)[INFORME]
+    #v(0.2cm)
+    #text(size: 13pt, weight: "bold", fill: acento, tracking: 1pt)[PRIMERA EVALUACIÓN]
+  ]
+  #v(1cm)
+  #align(center)[
+    #line(length: 55%, stroke: 0.6pt + rgb("#CBD5E1"))
+    #v(0.25cm)
+    #text(size: 10.5pt, fill: rgb("#475569"))[ASIGNATURA]
+    #v(0.1cm)
+    #text(size: 15pt, weight: "bold", fill: tinta)[Internet de las Cosas]
+    #v(0.25cm)
+    #line(length: 55%, stroke: 0.6pt + rgb("#CBD5E1"))
+  ]
+  #v(0.9cm)
+  #align(center)[
+    #text(size: 10.5pt, fill: rgb("#475569"))[INTEGRANTES]
+    #v(0.3cm)
+    #text(size: 12.5pt, fill: tinta)[Álvaro Torrez]
+    #v(0.15cm)
+    #text(size: 12.5pt, fill: tinta)[Karen Vargas]
+  ]
+  #v(1.3cm)
+  #align(center)[
+    #grid(
+      columns: (1fr, 1fr),
+      row-gutter: 0.55cm,
+      column-gutter: 1cm,
+      [*Docente*], [Ing. Pamela Valenzuela],
+      [*Carrera*], [Ingeniería de Sistemas],
+      [*Fecha de entrega*], [12 de octubre de 2026],
+    )
+  ]
+  #v(1cm)
+  #align(center)[
+    #text(size: 11pt, weight: "bold", fill: tinta)[LA PAZ -- BOLIVIA]
+    #v(0.1cm)
+    #text(size: 11pt, fill: tinta)[2026]
   ]
 ]
 
@@ -342,6 +351,29 @@ El nodo físico es un *ESP32* con los siguientes componentes (pines reales de
     caja((2.8, 2.6), 1.8, 0.9, [LED estado])
   }),
 )
+
+El esquema anterior es la vista lógica de pines. El montaje real del nodo, tal como está
+cableado hoy y como lo refleja `firmware/configuracion.py`, es el siguiente:
+
+#figure(
+  image("assets/image.png", width: 100%),
+  caption: [Diagrama actual de conexiones del firmware: ESP32 alimentado desde dos celdas
+    18650 a través de un regulador LM2596 (5 V), driver TB6612FNG hacia los dos motores TT, y
+    los tres HC-SR04 con divisor resistivo en cada línea ECHO para adaptar los 5 V del sensor
+    a los 3.3 V que tolera el ESP32.],
+)
+
+#nota[
+  *Detalles del cableado que no se ven en el esquema de pines.* (1) Los HC-SR04 se alimentan a
+  5 V —por debajo de eso el transductor pierde alcance—, pero su salida ECHO entrega 5 V, que
+  el ESP32 no tolera: por eso cada ECHO pasa por un divisor resistivo antes de entrar al GPIO.
+  Las líneas TRIG sí van directas, porque el sensor reconoce el pulso de 3.3 V como nivel alto.
+  (2) La batería de dos celdas 18650 (6.0–8.4 V) alimenta al LM2596, que fija el riel de 5 V
+  común para el ESP32, el driver y los sensores; los motores se alimentan de ese mismo riel a
+  través del TB6612FNG. (3) Todas las masas —batería, regulador, driver, sensores y ESP32—
+  están unidas a un único GND: sin esa referencia común las medidas de ECHO y del ADC de
+  batería se vuelven ruidosas o directamente incorrectas.
+]
 
 // ===========================================================================
 = Diseño de la Base de Datos
@@ -783,7 +815,9 @@ desfase entre dos relojes de sistema distintos.
   panel, que se envía por `actualizar_config` por WebSocket y se retransmite al robot como
   mensaje retenido en el tópico `config`.
 - *Alta de robots* (`DialogoNuevoRobot`): genera el `ROBOT_ID` y el token MQTT, y entrega al
-  usuario un `config.py` listo para copiar al firmware — el token se muestra una sola vez.
+  usuario un `config.py` listo para copiar al firmware. El token se guarda cifrado
+  (AES-256-GCM con clave derivada del `JWT_SECRET`), así que su dueño puede volver a
+  consultarlo en «Credenciales» sin regenerarlo.
 - *Modo oscuro* y vistas responsivas (comprobadas en 375 px, 768 px y 1440 px de ancho, ver
   anexos).
 

@@ -7,16 +7,19 @@ import { Router } from 'express';
 import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { requireAdmin, requireAuth } from '../auth.ts';
+import { COLUMNAS_DISPOSITIVO, flotaRobots, listaUsuarios, resumenFlota } from '../consultas.ts';
 import { pool } from '../db.ts';
 import { HttpError, isUniqueViolation, parse, positiveId } from '../http.ts';
 import { removeDevices, syncBroker } from '../mqtt/broker-credentials.ts';
 import { cerrarSesion } from '../sesiones.ts';
-import { disconnectUser } from '../ws.ts';
+import { disconnectUser, emitirCambio } from '../ws.ts';
 import { EMAIL_TAKEN, USER_COLUMNS, emailSchema, nameSchema, passwordSchema } from './auth.ts';
-import { COLUMNAS_DISPOSITIVO } from './dispositivos.ts';
 
 export const adminRouter = Router();
 adminRouter.use(requireAuth, requireAdmin);
+
+/** Lo que deja obsoleto tocar una cuenta. */
+const CLAVES_USUARIOS = ['admin-users', 'admin-resumen', 'admin-robots', 'dispositivos'];
 
 const rolSchema = z.enum(['admin', 'cliente'], { message: 'Elige un rol: admin o cliente.' });
 
@@ -41,52 +44,17 @@ const sincronizarBrokerSuave = () =>
 // ---------- Panel general ----------
 
 adminRouter.get('/resumen', async (_req, res) => {
-  const [totales, activos] = await Promise.all([
-    pool.query(
-      `SELECT (SELECT count(*) FROM usuarios WHERE rol = 'cliente')::int            AS clientes,
-              (SELECT count(*) FROM dispositivos WHERE NOT revocado)::int      AS robots,
-              (SELECT count(*) FROM dispositivos WHERE en_linea
-                                               AND NOT revocado)::int          AS "robotsEnLinea",
-              (SELECT count(*) FROM sesiones
-                WHERE iniciada_en >= date_trunc('day', now()))::int              AS "sesionesHoy",
-              (SELECT count(*) FROM sesiones WHERE finalizada_en IS NULL)::int   AS "sesionesActivas"`,
-    ),
-    pool.query(
-      `SELECT s.id AS "sesionId", s.dispositivo_id AS "dispositivoId", d.nombre, u.nombre AS "usuario",
-              s.iniciada_en AS "iniciadaEn", s.total_lecturas AS "lecturas"
-       FROM sesiones s
-       JOIN dispositivos d ON d.id = s.dispositivo_id
-       JOIN usuarios u ON u.id = d.usuario_id
-       WHERE s.finalizada_en IS NULL ORDER BY s.iniciada_en`,
-    ),
-  ]);
-  res.json({ ...totales.rows[0], sesionesEnCurso: activos.rows });
+  res.json(await resumenFlota());
 });
 
 adminRouter.get('/robots', async (_req, res) => {
-  const { rows } = await pool.query(
-    `SELECT ${COLUMNAS_DISPOSITIVO}, u.nombre AS "usuario", u.correo AS "usuarioEmail",
-            (SELECT count(*)::int FROM sesiones s WHERE s.dispositivo_id = d.id) AS "totalSesiones"
-     FROM dispositivos d JOIN usuarios u ON u.id = d.usuario_id
-     ORDER BY d.revocado, d.creado_en DESC`,
-  );
-  res.json(rows);
+  res.json(await flotaRobots());
 });
 
 // ---------- Usuarios ----------
 
 adminRouter.get('/users', async (_req, res) => {
-  const { rows } = await pool.query(
-    `SELECT u.id, u.correo AS email, u.nombre AS name, u.rol AS role,
-            u.activo AS "isActive", u.creado_en AS "createdAt",
-            (SELECT count(*)::int FROM dispositivos d
-              WHERE d.usuario_id = u.id AND NOT d.revocado)                        AS "robots",
-            (SELECT count(*)::int FROM sesiones s JOIN dispositivos d ON d.id = s.dispositivo_id
-              WHERE d.usuario_id = u.id)                                             AS "sesiones",
-            (SELECT max(d.ultimo_contacto) FROM dispositivos d WHERE d.usuario_id = u.id) AS "ultimaActividad"
-     FROM usuarios u ORDER BY u.rol, u.nombre`,
-  );
-  res.json(rows);
+  res.json(await listaUsuarios());
 });
 
 adminRouter.post('/users', async (req, res) => {
@@ -99,6 +67,7 @@ adminRouter.post('/users', async (req, res) => {
       `INSERT INTO usuarios (correo, contrasena, nombre, rol) VALUES ($1, $2, $3, $4) RETURNING ${USER_COLUMNS}`,
       [body.email, await bcrypt.hash(body.password, 10), body.name, body.role],
     );
+    emitirCambio(CLAVES_USUARIOS, rows[0].id);
     res.status(201).json(rows[0]);
   } catch (e) {
     if (isUniqueViolation(e)) throw EMAIL_TAKEN;
@@ -158,6 +127,7 @@ adminRouter.patch('/users/:id', async (req, res) => {
   }
   if (body.role && body.role !== objetivo.role) disconnectUser(id); // que reconecte con el rol nuevo
   if (body.isActive !== undefined && body.isActive !== objetivo.isActive) await sincronizarBrokerSuave();
+  emitirCambio(CLAVES_USUARIOS, id);
   res.json(actualizado);
 });
 
@@ -166,6 +136,7 @@ adminRouter.post('/users/:id/password', async (req, res) => {
   await getUser(id);
   const password = nanoid(12);
   await pool.query('UPDATE usuarios SET contrasena = $2 WHERE id = $1', [id, await bcrypt.hash(password, 10)]);
+  emitirCambio(CLAVES_USUARIOS, id);
   res.json({ password }); // se muestra una sola vez
 });
 
@@ -184,6 +155,7 @@ adminRouter.delete('/users/:id', async (req, res) => {
       console.error('[admin] no se pudo quitar credenciales del broker:', e.message),
     );
   }
+  emitirCambio(CLAVES_USUARIOS, id);
   res.status(204).end();
 });
 
@@ -195,5 +167,6 @@ adminRouter.delete('/users/:id/datos', async (req, res) => {
     `DELETE FROM sesiones WHERE dispositivo_id IN (SELECT id FROM dispositivos WHERE usuario_id = $1)`,
     [id],
   ); // cascada: las lecturas de esas sesiones
+  emitirCambio([...CLAVES_USUARIOS, 'sesiones', 'resumen', 'historial', 'actividad-motor'], id);
   res.json({ sesionesBorradas: rowCount });
 });

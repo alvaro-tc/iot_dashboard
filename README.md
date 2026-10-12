@@ -166,8 +166,9 @@ mpremote connect COM3 reset
 ```
 
 El `ROBOT_ID` y la contraseña te los da el dashboard al pulsar **«Agregar robot»**, junto con
-un `config.py` listo para pegar. La contraseña se muestra **una sola vez**: en la base queda
-su hash bcrypt y en Mosquitto su hash PBKDF2.
+un `config.py` listo para pegar. Siempre puedes volver a consultarla en **«Credenciales»** desde
+/robots: en la base queda su hash bcrypt (lo que valida `/api/ingesta`) y además cifrada con
+AES-256-GCM bajo una clave derivada del `JWT_SECRET`, para poder mostrarla solo a su dueño.
 
 > `firmware/config.py` está en `.gitignore`: lleva la clave del WiFi y la del broker.
 

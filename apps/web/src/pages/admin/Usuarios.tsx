@@ -119,14 +119,14 @@ export function Usuarios() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button type="button" className="btn btn-acento" onClick={() => setNuevo(true)}>
+        <button type="button" className="btn btn-acento w-full xs:w-auto" onClick={() => setNuevo(true)}>
           <Plus className="size-4" />
           Nuevo usuario
         </button>
       </div>
 
       <Tarjeta titulo="Usuarios" subtitulo={`${data?.length ?? 0} cuentas`}>
-        <div className="overflow-x-auto">
+        <div className="tabla-scroll">
           <table className="tabla">
             <thead>
               <tr>

@@ -20,7 +20,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={push}>
       {children}
-      <div aria-live="polite" className="fixed right-4 bottom-4 z-50 flex max-w-sm flex-col gap-2">
+      {/* En móvil, por encima de la barra de navegación inferior (56 px + área segura). */}
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-4 md:max-w-sm"
+      >
         {items.map((t) => (
           <div
             key={t.id}

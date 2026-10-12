@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "lint": "tsc --noEmit && node src/lib/metricas.check.ts",
+    "lint": "tsc --noEmit && node src/lib/metricas.check.ts && node src/lib/prefs.check.ts",
     "preview": "vite preview"
   },
   "dependencies": {

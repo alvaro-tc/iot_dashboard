@@ -1,26 +1,29 @@
 // CRUD de robots. Al crear uno se genera su usuario/contraseña MQTT y se registra en
 // Mosquitto con una ACL que solo le deja hablar bajo roomba/{id}/#.
 //
-// La contraseña se devuelve UNA sola vez: en la base queda su hash bcrypt y en el broker su
-// hash PBKDF2. Si el usuario la pierde, hay que regenerarla.
+// La contraseña se guarda dos veces: como hash bcrypt (lo que valida /api/ingesta) y cifrada con
+// AES-256-GCM, para que el dueño del robot pueda volver a consultarla en GET /:id/credenciales sin
+// tener que regenerarla y reflashear el ESP32.
 import bcrypt from 'bcrypt';
 import { Router } from 'express';
 import { customAlphabet, nanoid } from 'nanoid';
 import { z } from 'zod';
 import { requireAuth } from '../auth.ts';
 import { configuracionDe, olvidarConfiguracion, publicarConfiguracion } from '../configuracion.ts';
+import { COLUMNAS_DISPOSITIVO, listaDispositivos } from '../consultas.ts';
 import { pool } from '../db.ts';
 import { env } from '../env.ts';
 import { HttpError, parse } from '../http.ts';
 import { addDevice, removeDevices } from '../mqtt/broker-credentials.ts';
 import { cerrarSesion } from '../sesiones.ts';
+import { cifrarToken, descifrarToken } from '../token-robot.ts';
 import { olvidarRobot } from '../telemetria.ts';
+import { emitirCambio, emitirCambioRobot } from '../ws.ts';
 
 const idCorto = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 
-export const COLUMNAS_DISPOSITIVO = `id, usuario_id AS "userId", nombre, ubicacion,
-  revocado AS "isRevoked", en_linea AS "enLinea", ultimo_contacto AS "ultimoContacto",
-  version_firmware AS "versionFirmware", creado_en AS "creadoEn"`;
+/** Lo que deja obsoleto dar de alta, renombrar o dar de baja un robot. */
+const CLAVES_ROBOTS = ['dispositivos', 'admin-robots', 'admin-resumen', 'admin-users'];
 
 const BROKER_CAIDO =
   'No se pudo actualizar el broker MQTT. Comprueba que Mosquitto está en marcha e inténtalo de nuevo.';
@@ -50,17 +53,7 @@ export const dispositivosRouter = Router();
 dispositivosRouter.use(requireAuth);
 
 dispositivosRouter.get('/', async (req, res) => {
-  const { rows } = await pool.query(
-    `SELECT ${COLUMNAS_DISPOSITIVO},
-            (SELECT count(*)::int FROM sesiones s WHERE s.dispositivo_id = d.id) AS "totalSesiones",
-            (SELECT l.bateria_porcentaje FROM lecturas l WHERE l.dispositivo_id = d.id
-             ORDER BY l.creado_en DESC LIMIT 1) AS "bateriaPct"
-     FROM dispositivos d
-     WHERE ($1 = 'admin' OR usuario_id = $2) AND NOT revocado
-     ORDER BY creado_en`,
-    [req.user.role, req.user.id],
-  );
-  res.json(rows);
+  res.json(await listaDispositivos(req.user));
 });
 
 dispositivosRouter.post('/', async (req, res) => {
@@ -69,9 +62,9 @@ dispositivosRouter.post('/', async (req, res) => {
   const id = `roomba-${idCorto()}`;
   const token = nanoid(32);
   const { rows } = await pool.query(
-    `INSERT INTO dispositivos (id, usuario_id, nombre, ubicacion, token_hash)
-     VALUES ($1, $2, $3, $4, $5) RETURNING ${COLUMNAS_DISPOSITIVO}`,
-    [id, req.user.id, body.nombre, body.ubicacion, await bcrypt.hash(token, 10)],
+    `INSERT INTO dispositivos (id, usuario_id, nombre, ubicacion, token_hash, token_cifrado)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING ${COLUMNAS_DISPOSITIVO}`,
+    [id, req.user.id, body.nombre, body.ubicacion, await bcrypt.hash(token, 10), cifrarToken(token)],
   );
   try {
     await addDevice(id, token);
@@ -85,6 +78,7 @@ dispositivosRouter.post('/', async (req, res) => {
   const config = await configuracionDe(id);
   publicarConfiguracion(id, config);
 
+  emitirCambio(CLAVES_ROBOTS, req.user.id);
   res.status(201).json({ dispositivo: rows[0], token, config, broker: infoBroker() });
 });
 
@@ -99,16 +93,32 @@ dispositivosRouter.patch('/:id', async (req, res) => {
      WHERE id = $1 RETURNING ${COLUMNAS_DISPOSITIVO}`,
     [req.params.id, body.nombre ?? null, body.ubicacion ?? null],
   );
+  emitirCambioRobot(req.params.id, CLAVES_ROBOTS);
   res.json(rows[0]);
+});
+
+/**
+ * Credenciales completas del robot, para volver a copiarlas en el config.py del ESP32.
+ * token = null en robots dados de alta antes de guardarse cifrado (o con otro JWT_SECRET):
+ * esos sí hay que regenerarlos.
+ */
+dispositivosRouter.get('/:id/credenciales', async (req, res) => {
+  await exigirPropiedad(req.params.id, req.user);
+  const { rows } = await pool.query<{ token_cifrado: string | null }>(
+    'SELECT token_cifrado FROM dispositivos WHERE id = $1',
+    [req.params.id],
+  );
+  res.json({ id: req.params.id, token: descifrarToken(rows[0].token_cifrado), broker: infoBroker() });
 });
 
 /** Nueva contraseña MQTT. La anterior deja de servir en cuanto Mosquitto recarga. */
 dispositivosRouter.post('/:id/regenerar-clave', async (req, res) => {
   await exigirPropiedad(req.params.id, req.user);
   const token = nanoid(32);
-  await pool.query('UPDATE dispositivos SET token_hash = $2 WHERE id = $1', [
+  await pool.query('UPDATE dispositivos SET token_hash = $2, token_cifrado = $3 WHERE id = $1', [
     req.params.id,
     await bcrypt.hash(token, 10),
+    cifrarToken(token),
   ]);
   try {
     await addDevice(req.params.id, token);
@@ -127,6 +137,7 @@ dispositivosRouter.delete('/:id', async (req, res) => {
   );
   if (!rowCount) throw new HttpError(404, 'El robot no existe o ya estaba dado de baja.');
 
+  emitirCambioRobot(req.params.id, CLAVES_ROBOTS);
   await cerrarSesion(req.params.id).catch(() => {});
   olvidarRobot(req.params.id);
   olvidarConfiguracion(req.params.id);

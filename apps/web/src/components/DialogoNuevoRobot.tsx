@@ -1,5 +1,5 @@
-// Alta de un robot. La contraseña MQTT se muestra UNA sola vez: el backend solo guarda su
-// hash, así que si se cierra el diálogo sin copiarla hay que regenerarla desde /robots.
+// Alta de un robot. Las credenciales se pueden volver a consultar en cualquier momento desde
+// «Credenciales» en /robots, así que cerrar este diálogo sin copiarlas no obliga a regenerar nada.
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { ApiError, api, errorMessage } from '../lib/api.ts';
@@ -8,7 +8,7 @@ import { useToast } from '../lib/toast.tsx';
 import type { AltaDispositivo } from '../lib/types.ts';
 import { Modal } from './ui.tsx';
 
-function Copiable({ etiqueta, valor, multilinea = false }: { etiqueta: string; valor: string; multilinea?: boolean }) {
+export function Copiable({ etiqueta, valor, multilinea = false }: { etiqueta: string; valor: string; multilinea?: boolean }) {
   const [copiado, setCopiado] = useState(false);
   const copiar = async () => {
     try {
@@ -39,6 +39,26 @@ function Copiable({ etiqueta, valor, multilinea = false }: { etiqueta: string; v
   );
 }
 
+/** Bloque de credenciales copiables, compartido con el diálogo «Credenciales» de /robots. */
+export function Credenciales({ id, token, broker }: { id: string; token: string; broker: { host: string; port: number } }) {
+  const fragmento = `# firmware/configuracion.py
+WIFI_SSID     = "TU_RED"
+WIFI_CLAVE    = "TU_CLAVE"
+
+ROBOT_ID      = "${id}"
+MQTT_SERVIDOR = "${broker.host}"
+MQTT_PUERTO   = ${broker.port}
+MQTT_USUARIO  = ROBOT_ID
+MQTT_CLAVE    = "${token}"`;
+  return (
+    <div className="space-y-3">
+      <Copiable etiqueta="ID del robot (usuario MQTT)" valor={id} />
+      <Copiable etiqueta="Contraseña MQTT" valor={token} />
+      <Copiable etiqueta="configuracion.py listo para pegar" valor={fragmento} multilinea />
+    </div>
+  );
+}
+
 export function DialogoNuevoRobot({ onCerrar }: { onCerrar: () => void }) {
   const { recargar, elegir } = useRobots();
   const toast = useToast();
@@ -64,18 +84,6 @@ export function DialogoNuevoRobot({ onCerrar }: { onCerrar: () => void }) {
       setEnviando(false);
     }
   };
-
-  const fragmentoConfig = alta
-    ? `# firmware/configuracion.py
-WIFI_SSID     = "TU_RED"
-WIFI_CLAVE    = "TU_CLAVE"
-
-ROBOT_ID      = "${alta.dispositivo.id}"
-MQTT_SERVIDOR = "${alta.broker.host}"
-MQTT_PUERTO   = ${alta.broker.port}
-MQTT_USUARIO  = ROBOT_ID
-MQTT_CLAVE    = "${alta.token}"`
-    : '';
 
   return (
     <Modal etiqueta="Agregar robot" ancho="max-w-lg" onCerrar={onCerrar}>
@@ -124,15 +132,12 @@ MQTT_CLAVE    = "${alta.token}"`
           <div>
             <h2 className="tarjeta-titulo mb-1">{alta.dispositivo.nombre} creado</h2>
             <p className="tarjeta-sub mb-4">
-              Copia la contraseña ahora: no se vuelve a mostrar. Si la pierdes, regenérala desde «Robots».
+              Pégalas en el <code>configuracion.py</code> del ESP32. Puedes volver a consultarlas desde
+              «Credenciales» en Robots.
             </p>
-            <div className="space-y-3">
-              <Copiable etiqueta="ID del robot (usuario MQTT)" valor={alta.dispositivo.id} />
-              <Copiable etiqueta="Contraseña MQTT" valor={alta.token} />
-              <Copiable etiqueta="config.py listo para pegar" valor={fragmentoConfig} multilinea />
-            </div>
+            <Credenciales id={alta.dispositivo.id} token={alta.token} broker={alta.broker} />
             <button type="button" className="btn btn-acento mt-6 w-full" onClick={onCerrar}>
-              Ya la copié
+              Listo
             </button>
           </div>
       )}

@@ -1,15 +1,15 @@
-// /robots — gestión de la flota: editar, regenerar credenciales MQTT y dar de baja.
+// /robots — gestión de la flota: editar, consultar o regenerar credenciales MQTT y dar de baja.
 import { useState } from 'react';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../lib/api.ts';
 import { useConfirmar } from '../lib/confirmar.tsx';
 import { haceCuanto, pct } from '../lib/formato.ts';
 import { useRobots } from '../lib/robots.tsx';
 import { useSocket } from '../lib/socket.tsx';
 import { useToast } from '../lib/toast.tsx';
-import type { Dispositivo } from '../lib/types.ts';
-import { DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
+import type { Credenciales, Dispositivo } from '../lib/types.ts';
+import { Credenciales as CredencialesCopiables, DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
 import { Badge, Esqueleto, Modal, Tarjeta, Vacio } from '../components/ui.tsx';
 
 function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () => void }) {
@@ -58,24 +58,67 @@ function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =
   );
 }
 
+/** Credenciales MQTT del robot: se consultan cuando hace falta y solo se regeneran a petición. */
 function DialogoClave({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () => void }) {
   const toast = useToast();
-  const [token, setToken] = useState<string | null>(null);
+  const confirmar = useConfirmar();
+  const [nuevoToken, setNuevoToken] = useState<string | null>(null);
+
+  const creds = useQuery({
+    queryKey: ['credenciales', robot.id],
+    queryFn: () => api<Credenciales>(`/api/dispositivos/${robot.id}/credenciales`),
+    staleTime: 0,
+    gcTime: 0,
+  });
 
   const regenerar = useMutation({
-    mutationFn: () => api<{ token: string }>(`/api/dispositivos/${robot.id}/regenerar-clave`, { method: 'POST' }),
-    onSuccess: (r) => setToken(r.token),
+    mutationFn: () => api<Credenciales>(`/api/dispositivos/${robot.id}/regenerar-clave`, { method: 'POST' }),
+    onSuccess: (r) => {
+      setNuevoToken(r.token);
+      toast('Contraseña regenerada. Actualiza el configuracion.py del ESP32.');
+    },
     onError: (e) => toast(errorMessage(e), 'error'),
   });
 
+  const token = nuevoToken ?? creds.data?.token ?? null;
+  const broker = creds.data?.broker;
+
+  const pedirRegenerar = async () => {
+    const ok = await confirmar({
+      titulo: `¿Regenerar la contraseña de «${robot.nombre}»?`,
+      mensaje:
+        'La contraseña actual dejará de funcionar en cuanto Mosquitto recargue y tendrás que actualizar el configuracion.py del ESP32.',
+      confirmar: 'Regenerar',
+      destructivo: true,
+    });
+    if (ok) regenerar.mutate();
+  };
+
   return (
-    <Modal etiqueta="Regenerar credenciales" onCerrar={onCerrar}>
-      <h2 className="tarjeta-titulo mb-1">Regenerar credenciales</h2>
-      {!token ? (
+    <Modal etiqueta="Credenciales del robot" ancho="max-w-lg" onCerrar={onCerrar}>
+      <h2 className="tarjeta-titulo mb-1">Credenciales de {robot.nombre}</h2>
+      {creds.isPending ? (
+        <Esqueleto className="mt-4 h-48" />
+      ) : creds.isError ? (
+        <p className="tarjeta-sub mt-3">{errorMessage(creds.error)}</p>
+      ) : token && broker ? (
+        <>
+          <p className="tarjeta-sub mb-4">Las mismas que tiene el robot ahora mismo. Puedes consultarlas cuando quieras.</p>
+          <CredencialesCopiables id={robot.id} token={token} broker={broker} />
+          <div className="mt-6 flex gap-2">
+            <button type="button" className="btn flex-1" onClick={pedirRegenerar} disabled={regenerar.isPending}>
+              {regenerar.isPending ? 'Generando…' : 'Regenerar contraseña'}
+            </button>
+            <button type="button" className="btn btn-acento flex-1" onClick={onCerrar}>
+              Listo
+            </button>
+          </div>
+        </>
+      ) : (
         <>
           <p className="tarjeta-sub mb-5">
-            La contraseña actual de <strong className="text-tinta">{robot.nombre}</strong> dejará de funcionar en
-            cuanto Mosquitto recargue. Tendrás que actualizar el <code>config.py</code> del ESP32.
+            Este robot se dio de alta antes de que se guardaran las credenciales recuperables, así que su contraseña no
+            se puede mostrar. Regenérala para verla (habrá que actualizar el <code>configuracion.py</code> del ESP32).
           </p>
           <div className="flex gap-2">
             <button type="button" className="btn flex-1" onClick={onCerrar}>
@@ -91,23 +134,6 @@ function DialogoClave({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =>
             </button>
           </div>
         </>
-      ) : (
-        <>
-          <p className="tarjeta-sub mb-3">Cópiala ahora: no se vuelve a mostrar.</p>
-          <pre className="overflow-x-auto rounded-2xl border border-borde bg-tarjeta-tenue px-3 py-2 text-[13px]">
-            {token}
-          </pre>
-          <button
-            type="button"
-            className="btn mt-3 w-full"
-            onClick={() => navigator.clipboard.writeText(token).catch(() => {})}
-          >
-            Copiar
-          </button>
-          <button type="button" className="btn btn-acento mt-2 w-full" onClick={onCerrar}>
-            Listo
-          </button>
-        </>
       )}
     </Modal>
   );
@@ -121,7 +147,7 @@ export function Robots() {
   const confirmar = useConfirmar();
   const [nuevo, setNuevo] = useState(false);
   const [editando, setEditando] = useState<Dispositivo | null>(null);
-  const [regenerando, setRegenerando] = useState<Dispositivo | null>(null);
+  const [viendoClave, setViendoClave] = useState<Dispositivo | null>(null);
 
   const borrar = useMutation({
     mutationFn: (id: string) => api(`/api/dispositivos/${id}`, { method: 'DELETE' }),
@@ -137,7 +163,7 @@ export function Robots() {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
-        <button type="button" className="btn btn-acento" onClick={() => setNuevo(true)}>
+        <button type="button" className="btn btn-acento w-full xs:w-auto" onClick={() => setNuevo(true)}>
           <Plus className="size-4" />
           Agregar robot
         </button>
@@ -164,7 +190,7 @@ export function Robots() {
                     </span>
                     Editar
                   </button>
-                  <button type="button" className="chip" onClick={() => setRegenerando(r)}>
+                  <button type="button" className="chip" onClick={() => setViendoClave(r)}>
                     <span className="chip-icono">
                       <KeyRound className="size-3.5" />
                     </span>
@@ -233,7 +259,7 @@ export function Robots() {
         />
       )}
       {editando && <DialogoEditar robot={editando} onCerrar={() => setEditando(null)} />}
-      {regenerando && <DialogoClave robot={regenerando} onCerrar={() => setRegenerando(null)} />}
+      {viendoClave && <DialogoClave robot={viendoClave} onCerrar={() => setViendoClave(null)} />}
     </div>
   );
 }

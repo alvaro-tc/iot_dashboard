@@ -199,7 +199,7 @@ export function Historial() {
             { valor: '30d' as Rango, texto: '30 días' },
           ]}
         />
-        <button type="button" className="btn btn-acento" onClick={exportarCsv} disabled={!robot}>
+        <button type="button" className="btn btn-acento w-full xs:w-auto" onClick={exportarCsv} disabled={!robot}>
           <Download className="size-4" />
           Exportar CSV
         </button>
@@ -212,27 +212,27 @@ export function Historial() {
       ) : (
         <>
           <Tarjeta titulo="Distancia mínima por hora" subtitulo="Lo más cerca que estuvo un obstáculo en cada hora">
-            <div className="h-[280px]">
+            <div className="h-[220px] sm:h-[280px]">
               <canvas ref={(c) => void (refDistancias.current = c)} />
             </div>
           </Tarjeta>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Tarjeta titulo="Marcha y parada por hora" subtitulo="Lecturas apiladas">
-              <div className="h-[280px]">
+              <div className="h-[220px] sm:h-[280px]">
                 <canvas ref={(c) => void (refEstados.current = c)} />
               </div>
             </Tarjeta>
 
             <Tarjeta titulo="PWM medio por rueda" subtitulo="Valor absoluto, de 0 a 255">
-              <div className="h-[280px]">
+              <div className="h-[220px] sm:h-[280px]">
                 <canvas ref={(c) => void (refPwm.current = c)} />
               </div>
             </Tarjeta>
           </div>
 
           <Tarjeta titulo="Obstáculos por hora y día" subtitulo="Cuándo se encuentra más muebles">
-            <div className="overflow-x-auto">
+            <div className="tabla-scroll">
               <table className="border-separate border-spacing-[2px]">
                 <caption className="sr-only">Mapa de calor de obstáculos por día de la semana y hora del día</caption>
                 <thead>
