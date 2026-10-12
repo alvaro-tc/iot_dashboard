@@ -1,5 +1,5 @@
 // /historial — agregados desde Postgres: distancia mínima por hora y sensor, reparto entre
-// marcha y parada, PWM medio de cada rueda y heatmap de obstáculos (24 h × 7 días).
+// marcha y parada y PWM medio de cada rueda.
 //
 // Todo sale de v_lecturas_por_hora: la vista ya hace las cuentas y aquí solo se dibujan.
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -150,20 +150,6 @@ export function Historial() {
     [datos, colores.tema],
   );
 
-  // Heatmap 24 h × 7 días: se dibuja con una tabla, no con Chart.js. Una matriz de celdas de
-  // color no necesita escalas ni ejes, y así es accesible con title por celda.
-  // Cada celda suma las lecturas en las que algún sensor vio algo a 15 cm o menos.
-  const matriz = useMemo(() => {
-    const m: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
-    for (const f of datos) {
-      const d = new Date(f.instante);
-      m[(d.getDay() + 6) % 7][d.getHours()] +=
-        (f.cercaIzquierda ?? 0) + (f.cercaCentral ?? 0) + (f.cercaDerecha ?? 0); // lunes primero
-    }
-    return m;
-  }, [datos]);
-  const maximo = Math.max(1, ...matriz.flat());
-
   const exportarCsv = async () => {
     if (!robot) return;
     try {
@@ -230,44 +216,6 @@ export function Historial() {
               </div>
             </Tarjeta>
           </div>
-
-          <Tarjeta titulo="Obstáculos por hora y día" subtitulo="Cuándo se encuentra más muebles">
-            <div className="tabla-scroll">
-              <table className="border-separate border-spacing-[2px]">
-                <caption className="sr-only">Mapa de calor de obstáculos por día de la semana y hora del día</caption>
-                <thead>
-                  <tr>
-                    <th />
-                    {Array.from({ length: 24 }, (_, h) => (
-                      <th key={h} className="p-0 text-[10px] font-normal text-tinta-suave">
-                        {h % 3 === 0 ? h : ''}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((dia, d) => (
-                    <tr key={dia}>
-                      <th scope="row" className="pr-2 text-[11px] font-normal text-tinta-suave">
-                        {dia}
-                      </th>
-                      {matriz[d].map((n, h) => (
-                        <td
-                          key={h}
-                          title={`${dia} ${h}:00 — ${n} lecturas con obstáculo cerca`}
-                          className="size-4 rounded-[3px]"
-                          style={{
-                            background:
-                              n === 0 ? 'var(--color-tarjeta-tenue)' : `color-mix(in srgb, var(--color-acento) ${(n / maximo) * 100}%, transparent)`,
-                          }}
-                        />
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </Tarjeta>
         </>
       )}
     </div>

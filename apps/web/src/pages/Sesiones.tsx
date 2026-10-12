@@ -48,45 +48,41 @@ function DonaMarcha({ s }: { s: ResumenSesion }) {
   return <canvas ref={canvasRef} role="img" aria-label="Reparto entre tiempo en marcha y detenido" />;
 }
 
-function BarrasObstaculos({ s }: { s: ResumenSesion }) {
+function DonaBateria({ s }: { s: ResumenSesion }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const colores = useColoresTema();
+  const consumida = s.bateriaConsumidaPorcentaje ?? 0;
+  const restante = Math.max(0, 100 - consumida);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const chart = new Chart(canvas, {
-      type: 'bar',
+      type: 'doughnut',
       data: {
-        labels: ['Izquierdo', 'Central', 'Derecho'],
+        labels: ['Consumida', 'Restante'],
         datasets: [
           {
-            label: 'Lecturas con obstáculo cerca',
-            data: [s.cercaIzquierda ?? 0, s.cercaCentral ?? 0, s.cercaDerecha ?? 0],
-            backgroundColor: colores.acento,
-            borderRadius: 8,
+            data: [consumida, restante],
+            backgroundColor: [colores.acento, colores.tintaSuave],
+            borderWidth: 0,
           },
         ],
       },
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: { grid: { display: false }, border: { display: false }, ticks: { color: colores.tintaSuave } },
-          y: {
-            beginAtZero: true,
-            grid: { color: colores.borde },
-            border: { display: false },
-            ticks: { color: colores.tintaSuave, precision: 0 },
-          },
+        cutout: '58%',
+        plugins: {
+          legend: { position: 'bottom', labels: { color: colores.tintaSuave, boxWidth: 10, usePointStyle: true } },
+          tooltip: { callbacks: { label: (i) => `${i.label}: ${pct(Number(i.parsed))}` } },
         },
       },
     });
     return () => chart.destroy();
-  }, [s, colores.tema]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [s, consumida, restante, colores.tema]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <canvas ref={canvasRef} role="img" aria-label="Lecturas con obstáculo cerca, por sensor" />;
+  return <canvas ref={canvasRef} role="img" aria-label="Porcentaje de batería empleada en la sesión" />;
 }
 
 export function Sesiones() {
@@ -174,9 +170,9 @@ export function Sesiones() {
                 <DonaMarcha s={actual} />
               </div>
             </Tarjeta>
-            <Tarjeta titulo="Obstáculos por sensor" subtitulo="Lecturas a 15 cm o menos">
+            <Tarjeta titulo="Batería empleada" subtitulo="Porcentaje consumido en la sesión">
               <div className="h-[200px] sm:h-[240px]">
-                <BarrasObstaculos s={actual} />
+                <DonaBateria s={actual} />
               </div>
             </Tarjeta>
           </div>
