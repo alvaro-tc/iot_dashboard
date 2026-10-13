@@ -66,7 +66,7 @@ export async function resumenFlota() {
 export async function listaUsuarios() {
   const { rows } = await pool.query(
     `SELECT u.id, u.correo AS email, u.nombre AS name, u.rol AS role,
-            u.activo AS "isActive", u.creado_en AS "createdAt",
+            u.activo AS "isActive", u.lidar_habilitado AS "lidarHabilitado", u.creado_en AS "createdAt",
             (SELECT count(*)::int FROM dispositivos d
               WHERE d.usuario_id = u.id AND NOT d.revocado)                        AS "robots",
             (SELECT count(*)::int FROM sesiones s JOIN dispositivos d ON d.id = s.dispositivo_id

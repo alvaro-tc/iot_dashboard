@@ -86,8 +86,16 @@ function prng(semilla: number) {
 }
 
 const RADIO_CHASIS = 17;
-const DISTANCIA_RUEDAS = 24; // cm entre ruedas
-const VEL_MAX_CM_S = 22; // velocidad lineal al PWM máximo
+/**
+ * Constantes físicas del robot simulado. Se exportan porque de ellas sale la calibración
+ * equivalente del simulador, y con ella se comprueba que su cinemática y la odometría del modo
+ * lidar (`avanzarPose` en lidar.ts) coinciden en marco y en signo. Ahí vivía un error: el
+ * simulador giraba al lado contrario del que decía, y nadie lo veía porque la sala es simétrica.
+ */
+export const DISTANCIA_RUEDAS_SIM = 24; // cm entre ruedas
+export const VEL_MAX_CM_S_SIM = 22; // velocidad lineal al PWM máximo
+const DISTANCIA_RUEDAS = DISTANCIA_RUEDAS_SIM;
+const VEL_MAX_CM_S = VEL_MAX_CM_S_SIM;
 
 export class RobotSimulado {
   // Pose real dentro de la habitación. Interna: no se publica.
@@ -105,6 +113,12 @@ export class RobotSimulado {
 
   /** A false las ruedas quedan a cero: sirve para simular un robot parado. */
   activo = true;
+  /**
+   * Mando directo de las ruedas: lo pone el simulador en modo lidar, donde las maniobras las
+   * ordena el dashboard (girar para barrer, avanzar) en vez de decidirlas el robot. A null,
+   * manda su propia máquina de evasión, como el robot de verdad limpiando.
+   */
+  mando: { izq: number; der: number } | null = null;
   bateriaV = 8.4;
   distanciaRecorridaCm = 0;
   evasiones = 0;
@@ -118,6 +132,15 @@ export class RobotSimulado {
     this.paredes = habitacion(opciones.areaAnchoCm ?? 500, opciones.areaAltoCm ?? 400);
     this.rnd = prng(opciones.semilla ?? 1);
     this.rth = this.rnd() * 360;
+  }
+
+  /**
+   * Pose real dentro de la habitación simulada. SOLO para pruebas y demos: el robot de verdad
+   * no sabe dónde está (es justo el problema que resuelve el encaje del barrido), así que nada
+   * del backend ni del firmware puede depender de esto.
+   */
+  pose(): { x: number; y: number; th: number } {
+    return { x: this.rx, y: this.ry, th: this.rth };
   }
 
   /** Nueva sesión: reinicia los contadores acumulados. */
@@ -237,14 +260,27 @@ export class RobotSimulado {
 
   /** Integra un paso del bucle de control. `dtMs` ~50 ms, igual que el firmware. */
   paso(dtMs: number): void {
-    this.decidir(this.distancias(), dtMs);
+    // Con mando puesto, el robot obedece en vez de decidir: es el modo lidar (firmware_beta),
+    // donde las maniobras las manda el dashboard. Sin mando, su máquina de evasión de siempre.
+    if (this.mando) {
+      this.vi = this.mando.izq;
+      this.vd = this.mando.der;
+    } else {
+      this.decidir(this.distancias(), dtMs);
+    }
 
     const dt = dtMs / 1000;
     // Cinemática de tracción diferencial a partir del PWM actual de cada rueda.
+    //
+    // omega sale de (izquierda − derecha), no al revés: con la rueda izquierda más rápida el
+    // robot gira a la DERECHA, que en el marco del lienzo (y hacia abajo, ver lidar.ts) es
+    // ángulo creciente. Antes estaba al contrario y el simulador giraba al lado opuesto del
+    // que decía su propia máquina de evasión; no se notaba porque la sala es simétrica y nadie
+    // dibujaba su pose, pero el modo lidar sí deduce la pose de estos mismos PWM.
     const cinematica = () => {
       const vIzq = (this.vi / PWM_MAX) * VEL_MAX_CM_S;
       const vDer = (this.vd / PWM_MAX) * VEL_MAX_CM_S;
-      return { v: (vDer + vIzq) / 2, omega: ((vDer - vIzq) / DISTANCIA_RUEDAS) * (180 / Math.PI) };
+      return { v: (vDer + vIzq) / 2, omega: ((vIzq - vDer) / DISTANCIA_RUEDAS) * (180 / Math.PI) };
     };
 
     // El chasis no atraviesa paredes, y la comprobación mira en el SENTIDO DE LA MARCHA: al

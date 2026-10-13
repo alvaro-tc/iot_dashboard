@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../lib/auth.tsx';
+import { useLidar } from '../lib/lidar.tsx';
 import { BarraSuperior } from './BarraSuperior.tsx';
 import { Modal } from './ui.tsx';
 
@@ -47,6 +48,9 @@ const ENLACES_ADMIN: Enlace[] = [
   { to: '/perfil', texto: 'Perfil', Icono: UserRound, movil: true },
 ];
 
+/** Modo lidar. Va justo después del panel: es la otra vista "de un vistazo". */
+const ENLACE_MAPA: Enlace = { to: '/mapa', texto: 'Mapa', Icono: Radar, movil: true };
+
 function Logo() {
   return (
     <span className="inline-flex size-10 items-center justify-center rounded-2xl bg-acento text-white" aria-hidden>
@@ -57,9 +61,13 @@ function Logo() {
 
 export function AppLayout() {
   const { user, logout } = useAuth();
+  const { habilitado: conLidar } = useLidar();
   const [ayuda, setAyuda] = useState(false);
   const [abierta, setAbierta] = useState(false);
-  const enlaces = user!.role === 'admin' ? ENLACES_ADMIN : ENLACES_CLIENTE;
+  // El enlace del mapa solo se añade con el permiso del modo lidar: sin él, el menú es
+  // exactamente el de antes y no hay nada que delate la función.
+  const base = user!.role === 'admin' ? ENLACES_ADMIN : ENLACES_CLIENTE;
+  const enlaces = conLidar ? [...base.slice(0, 1), ENLACE_MAPA, ...base.slice(1)] : base;
   const enMovil = enlaces.filter((l) => l.movil).slice(0, 5);
 
   return (

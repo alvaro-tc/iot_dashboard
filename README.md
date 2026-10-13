@@ -83,7 +83,8 @@ apps/api/        API: Express + Socket.IO + puente MQTT + persistencia por lotes
 apps/web/        Dashboard: React + Vite + Tailwind + Chart.js
 packages/shared/ Contratos MQTT, geometría del robot y motor de simulación
 simulador/       Robot simulado que publica por MQTT igual que el ESP32
-firmware/        MicroPython para el ESP32
+firmware/        MicroPython para el ESP32 (modo clásico: mando ESP-NOW)
+firmware_beta/   MicroPython del modo lidar: sonar giratorio y limpieza autónoma
 infra/           Configuración del VPS: Mosquitto, Caddy, pm2, instalar.sh
 mosquitto/       Configuración de Mosquitto para desarrollo local
 docs/            Circuito, diagrama ER, API, tópicos MQTT y despliegue
@@ -175,15 +176,53 @@ AES-256-GCM bajo una clave derivada del `JWT_SECRET`, para poder mostrarla solo 
 ## Comprobaciones
 
 ```bash
-pnpm lint                               # tipos de las tres apps + autocomprobantes
+pnpm lint                               # tipos de las cuatro apps + autocomprobantes
 pnpm build                              # compila API y dashboard
 node packages/shared/src/robot.check.ts # umbrales, batería, movimiento y simulación
+node packages/shared/src/lidar.check.ts # encaje de la pose, rejilla, formas y calibración
 node apps/web/src/lib/metricas.check.ts # lo que cuentan los widgets de uso
+pnpm --filter @iot/shared entrenar      # reentrena el modelo del sonar y mide si gana
+PYTHONPATH=firmware python firmware_beta/navegacion.py  # la evasión del modo lidar, en el PC
 ```
 
-Los dos autocomprobantes cubren lo que puede romperse en silencio: que avanzar, girar y estar
-detenido se lean bien del PWM de las dos ruedas, y que los contadores de tiempo de motor no
-inflen el número cuando hay un corte de conexión.
+Los autocomprobantes cubren lo que puede romperse en silencio: que avanzar, girar y estar
+detenido se lean bien del PWM de las dos ruedas, que los contadores de tiempo de motor no
+inflen el número cuando hay un corte de conexión, y —en el modo lidar— que la pose se recupere
+de un barrido con ruido, que una mesa se reconozca como caja y una maceta como redonda, y que
+**la cinemática del simulador y la odometría del lidar coincidan en signo y escala** (ahí había
+un error real: el simulador giraba al lado contrario del que decía).
+
+## Modo lidar: mapeo de habitaciones
+
+Función nueva y **opcional**, que un admin activa cuenta por cuenta (Admin → Usuarios → *Mapa
+lidar*). Un cliente sin el permiso no tiene la ruta, ni el menú, ni el widget, y la API le
+responde 404: no puede enterarse de que existe.
+
+Convierte los **tres HC-SR04 de siempre** en un lidar: el robot gira sobre su propio eje y los
+sensores barren los 360°. Como la habitación es de paredes rectas y de tamaño aproximado
+conocido, cada barrido se **encaja contra el polígono de la sala** (ICP punto-a-arista) y de ahí
+sale la pose, sin encoders y sin que la deriva se acumule. Lo que no cae sobre una pared es
+obstáculo, acumulado en una rejilla de ocupación en log-odds.
+
+- **Salas rectangulares y no rectangulares** (en L o dibujadas a clics, con las paredes rectas
+  garantizadas por construcción). Un rectángulo es un polígono de 4 vértices, así que el encaje
+  es el mismo código para los dos casos.
+- **Calibración previa sin hardware extra**: girando, el perfil del sonar se repite una vez por
+  vuelta (autocorrelación → grados/segundo); de frente a una pared, la distancia cae a la
+  velocidad real (mínimos cuadrados → cm/s). Son las dos medidas que convierten tiempo en
+  ángulo, y sin ellas el mapa sale torcido.
+- **Puertas**: se dibujan sobre la pared y el robot las trata como pared, así que no se escapa
+  por el hueco. Durante la limpieza es el backend quien lo desvía (el robot no conoce el mapa).
+- **Modelo de ML** (`packages/shared/src/lidar.entrenar.ts`): el modelo inverso del sonar resulta
+  ser una regresión logística sobre features acumuladas, así que se entrena contra la
+  verdad-terreno del simulador. Medido en salas nunca vistas, con la tubería real: **IoU de la
+  clase ocupada 19,5 % → 32,4 % (+13 puntos)**. Se queda porque mide mejor; si la ganancia
+  bajara de 2 puntos, `PESOS` vuelve solo a los valores a mano.
+- El mapeo entero (cinemática, encaje, rejilla, formas) vive en `packages/shared/src/lidar.ts`,
+  no en el ESP32: así se corrige sin reflashear y se prueba en el PC. El firmware solo obedece,
+  mide y esquiva.
+
+Sin hardware a mano, el simulador habla el mismo protocolo: `pnpm simular` y a mapear.
 
 ## Despliegue
 

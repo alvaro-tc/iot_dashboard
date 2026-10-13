@@ -137,6 +137,9 @@ export function Usuarios() {
                 <th className="num">Sesiones</th>
                 <th>Última actividad</th>
                 <th>Activo</th>
+                {/* Modo lidar: el admin decide qué cuentas lo tienen. Un cliente sin el permiso
+                    no ve el menú, ni la ruta, ni el widget, y la API le responde 404. */}
+                <th>Mapa lidar</th>
                 <th />
               </tr>
             </thead>
@@ -159,6 +162,15 @@ export function Usuarios() {
                       etiqueta={`Cuenta activa de ${u.name}`}
                       disabled={u.id === user!.id || actualizar.isPending}
                       onCambiar={(v) => actualizar.mutate({ id: u.id, cambio: { isActive: v } })}
+                    />
+                  </td>
+                  <td>
+                    <Interruptor
+                      activo={u.role === 'admin' || u.lidarHabilitado === true}
+                      etiqueta={`Modo lidar para ${u.name}`}
+                      // Un admin lo tiene siempre: es quien lo reparte y tiene que poder probarlo.
+                      disabled={u.role === 'admin' || actualizar.isPending}
+                      onCambiar={(v) => actualizar.mutate({ id: u.id, cambio: { lidarHabilitado: v } })}
                     />
                   </td>
                   <td>

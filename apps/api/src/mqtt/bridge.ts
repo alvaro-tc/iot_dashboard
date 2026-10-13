@@ -15,12 +15,38 @@ import mqtt from 'mqtt';
 import { z } from 'zod';
 import { env } from '../env.ts';
 import { marcarPresencia } from '../presencia.ts';
+import { recibirEstadoFirmware, recibirLote } from '../lidar/mapeo.ts';
 import { procesarTelemetria, telemetriaSchema } from '../telemetria.ts';
 
 const MIN_ESPERA = 1_000;
 const MAX_ESPERA = 30_000;
 
 const estadoSchema = z.object({ en_linea: z.boolean(), firmware: z.string().max(32).optional() });
+
+/**
+ * Lote de muestras del sonar giratorio (firmware beta). Las muestras llegan como tuplas
+ * [dt, izquierdo, central, derecho] para que un lote de 20 quepa en medio kilobyte de JSON;
+ * aquí se convierten al objeto que usa el resto del código.
+ *
+ * El límite de 200 muestras por lote es defensivo: un robot con el firmware mal no puede
+ * mandar un array de un millón de elementos y comerse la memoria del backend.
+ */
+const muestraSchema = z
+  .tuple([
+    z.number().min(0).max(120_000),
+    z.number().min(0).max(500).nullable(),
+    z.number().min(0).max(500).nullable(),
+    z.number().min(0).max(500).nullable(),
+  ])
+  .transform(([dt, izquierdo, central, derecho]) => ({ dt, izquierdo, central, derecho }));
+
+const loteSchema = z.object({
+  barrido: z.number().int().min(0),
+  lote: z.number().int().min(0),
+  modo: z.enum(['barrer', 'limpiar', 'girar', 'avanzar', 'calibrar_giro', 'calibrar_avance']),
+  muestras: z.array(muestraSchema).max(200),
+  fin: z.boolean().default(false),
+});
 
 let client: mqtt.MqttClient | null = null;
 export const getMqtt = () => client;
@@ -55,8 +81,20 @@ async function manejar(dispositivoId: string, sufijo: string, json: unknown): Pr
       await marcarPresencia(dispositivoId, p.data.en_linea, p.data.firmware ?? null);
       return;
     }
+    // Los dos siguientes solo los publica el firmware beta (ver firmware_beta/). El clásico
+    // no los usa, así que los dos firmwares conviven en el mismo broker.
+    case 'barrido': {
+      const p = loteSchema.safeParse(json);
+      if (!p.success) throw new Error(`barrido inválido: ${p.error.issues[0]?.message}`);
+      await recibirLote(dispositivoId, p.data);
+      return;
+    }
+    case 'lidar': {
+      if (json && typeof json === 'object') await recibirEstadoFirmware(dispositivoId, json as Record<string, unknown>);
+      return;
+    }
     default:
-      return; // `config` lo publica el backend; su eco se ignora
+      return; // `config` y `comando` los publica el backend; su eco se ignora
   }
 }
 

@@ -9,6 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "check": "node src/robot.check.ts"
+    "check": "node src/robot.check.ts && node src/lidar.check.ts",
+    "entrenar": "node src/lidar.entrenar.ts"
   }
 }

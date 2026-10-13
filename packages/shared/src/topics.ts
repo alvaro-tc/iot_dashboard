@@ -9,9 +9,16 @@ export const PREFIJO = 'roomba';
 /** El backend se suscribe a todo lo que sube de los robots con un solo patrón. */
 export const SUSCRIPCION_ROBOTS = `${PREFIJO}/+/+`;
 
-/** Lo que sube el robot y lo único que baja: su configuración, publicada retenida. */
-export type TopicoSubida = 'telemetria' | 'estado';
-export type TopicoBajada = 'config';
+/**
+ * Lo que sube el robot y lo que baja.
+ *
+ * `barrido` y `lidar` son del firmware beta (ver firmware_beta/): el robot sube lotes de
+ * muestras del sonar giratorio y su estado de mapeo, y recibe órdenes por `comando`. El
+ * firmware clásico no los usa, y el backend ignora los tópicos que no conoce, así que los dos
+ * firmwares conviven en el mismo broker sin tocar la ACL (que ya es roomba/{id}/#).
+ */
+export type TopicoSubida = 'telemetria' | 'estado' | 'barrido' | 'lidar';
+export type TopicoBajada = 'config' | 'comando';
 
 export const topico = (dispositivoId: string, t: TopicoSubida | TopicoBajada) =>
   `${PREFIJO}/${dispositivoId}/${t}`;

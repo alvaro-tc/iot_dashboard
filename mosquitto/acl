@@ -6,6 +6,9 @@ topic readwrite roomba/#
 user roomba-cocina
 topic readwrite roomba/roomba-cocina/#
 
+user roomba-demo
+topic readwrite roomba/roomba-demo/#
+
 user roomba-maria
 topic readwrite roomba/roomba-maria/#
 

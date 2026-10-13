@@ -42,6 +42,23 @@ export function publicarConfiguracion(dispositivoId: string, cfg: Configuracion)
   publicar(topico(dispositivoId, 'config'), cfg, { qos: 1, retain: true });
 }
 
+/**
+ * Republica la configuración retenida de todos los robots vivos. Se llama al arrancar: ver el
+ * comentario de index.ts, un retenido viejo puede dejar a un robot midiendo null en los tres
+ * sensores sin que nada avise.
+ */
+export async function republicarConfiguraciones(): Promise<void> {
+  const { rows } = await pool.query<{ id: string }>('SELECT id FROM dispositivos WHERE NOT revocado');
+  for (const { id } of rows) {
+    try {
+      publicarConfiguracion(id, await configuracionDe(id));
+    } catch (e) {
+      console.warn(`[config] no se pudo republicar la de ${id}: ${(e as Error).message}`);
+    }
+  }
+  if (rows.length) console.log(`[config] ${rows.length} configuración(es) retenida(s) al día`);
+}
+
 /** Aplica un cambio parcial, lo guarda y lo publica. Los rangos los validan zod y los CHECK. */
 export async function actualizarConfiguracion(dispositivoId: string, cambio: CambioConfig): Promise<Configuracion> {
   const { rows } = await pool.query<Configuracion>(

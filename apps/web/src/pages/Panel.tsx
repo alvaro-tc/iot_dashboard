@@ -45,10 +45,12 @@ import {
   PLANTILLA_CONTADOR,
   POR_DEFECTO_VISIBLES,
   TARJETAS_PANEL,
+  TARJETAS_SOLO_LIDAR,
   TEMAS_RADAR,
   usePanelTarjetas,
   type IdTarjeta,
 } from '../lib/panel.tsx';
+import { useLidar } from '../lib/lidar.tsx';
 import { useRobots } from '../lib/robots.tsx';
 import { ALCANCES, METRICAS, metrica, type IdMetrica } from '../lib/metricas.ts';
 import { useSocket } from '../lib/socket.tsx';
@@ -62,6 +64,7 @@ import { TarjetaContador, useResumen } from '../components/TarjetaContador.tsx';
 import { TarjetaDistancias } from '../components/TarjetaDistancias.tsx';
 import { TarjetaEstado } from '../components/TarjetaEstado.tsx';
 import { TarjetaActividadMotor } from '../components/TarjetaActividadMotor.tsx';
+import { TarjetaMapa } from '../components/TarjetaMapa.tsx';
 import { TarjetaRadar } from '../components/TarjetaRadar.tsx';
 import { TarjetaSesiones } from '../components/TarjetaSesiones.tsx';
 import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../components/ui.tsx';
@@ -143,6 +146,10 @@ function Miniatura({ children }: { children: ReactNode }) {
 function CajonWidgets({ vista, onEditar }: { vista?: (id: IdTarjeta) => ReactNode; onEditar?: (id: IdTarjeta) => void }) {
   const { ve, alternar, restablecer, restablecerDisposicion, disposicionTocada, visibles, anadirContador } =
     usePanelTarjetas();
+  // Sin el permiso del modo lidar, sus widgets no salen en el catálogo: esconder la función
+  // incluye no dejar rastro de ella aquí.
+  const { habilitado: conLidar } = useLidar();
+  const catalogo = TARJETAS_PANEL.filter((t) => conLidar || !TARJETAS_SOLO_LIDAR.includes(t.id));
   const contadores = visibles.filter(esContador).length;
   const deFabrica =
     visibles.length === POR_DEFECTO_VISIBLES.length && POR_DEFECTO_VISIBLES.every((id) => visibles.includes(id));
@@ -154,7 +161,7 @@ function CajonWidgets({ vista, onEditar }: { vista?: (id: IdTarjeta) => ReactNod
       </p>
       {/* Dos columnas con miniatura: entran el doble de widgets por pantalla de cajón. */}
       <ul className={vista ? 'grid grid-cols-2 gap-2' : 'space-y-1'}>
-        {TARJETAS_PANEL.map(({ id, texto, Icono }) => (
+        {catalogo.map(({ id, texto, Icono }) => (
           <li key={id}>
             <button
               type="button"
@@ -398,6 +405,7 @@ function DialogoWidget({ id, onCerrar }: { id: IdTarjeta; onCerrar: () => void }
 
 export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
+  const { habilitado: conLidar } = useLidar();
   const { layout, guardarLayout, alternar, alcances } = usePanelTarjetas();
   const { width, containerRef, mounted } = useContainerWidth();
   const marcoRef = useRef<HTMLDivElement>(null);
@@ -495,6 +503,10 @@ export function Panel() {
         return <TarjetaDistancias solo="derecho" />;
       case 'barras-distancia':
         return <TarjetaBarrasDistancia id={id} />;
+      case 'mapa':
+        // Si le quitaron el permiso teniendo el widget puesto, su caja sigue guardada pero no
+        // se dibuja nada: no se puede deducir que exista algo ahí.
+        return conLidar ? <TarjetaMapa /> : null;
       default:
         // Contadores: tantos como se añadan, cada uno con su métrica.
         return esContador(id) ? <TarjetaContador id={id} /> : null;

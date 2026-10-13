@@ -24,7 +24,7 @@ export const nameSchema = z
   .max(80, 'El nombre no puede superar 80 caracteres.');
 
 export const USER_COLUMNS = `id, correo AS email, nombre AS name, rol AS role,
-  activo AS "isActive", creado_en AS "createdAt"`;
+  activo AS "isActive", lidar_habilitado AS "lidarHabilitado", creado_en AS "createdAt"`;
 export const EMAIL_TAKEN = new HttpError(409, 'Revisa los campos marcados.', { email: 'Ya existe una cuenta con este correo.' });
 
 const signupSchema = z

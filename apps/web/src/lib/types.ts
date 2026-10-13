@@ -6,6 +6,12 @@ export interface User {
   name: string;
   role: Role;
   isActive: boolean;
+  /**
+   * Permiso del modo lidar, que da y quita un admin. A false, el cliente no tiene la ruta, ni
+   * el menú, ni el widget, y la API le responde 404: no puede enterarse de que existe.
+   * Un admin lo tiene siempre (es quien lo reparte y tiene que poder probarlo).
+   */
+  lidarHabilitado?: boolean;
   createdAt: string;
 }
 

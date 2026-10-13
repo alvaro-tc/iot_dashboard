@@ -8,6 +8,7 @@
 // completas en español, distancias por sensor y PWM con signo por rueda.
 import { bateriaPorcentaje, PWM_MAX, type Lectura, type TelemetriaMqtt } from '@iot/shared';
 import { z } from 'zod';
+import { seguirTelemetria } from './lidar/mapeo.ts';
 import { encolarLectura } from './persistencia.ts';
 import { abrirSesion, sesionActiva } from './sesiones.ts';
 import { emitirCambioRobot, emitirTelemetria } from './ws.ts';
@@ -111,10 +112,17 @@ export async function procesarTelemetria(
   sesion.bateriaInicioPorcentaje ??= l.bateriaPorcentaje;
   sesion.bateriaUltimaPorcentaje = l.bateriaPorcentaje;
 
-  // 3. Y por último, la cola de persistencia.
+  // 3. Modo lidar: con los PWM que acaba de publicar el robot se adelanta su odometría y se
+  //    vigila que no se escape por una puerta. No bloquea la telemetría: si falla, se registra
+  //    y el resto del dashboard sigue igual.
+  void seguirTelemetria(dispositivoId, l.movimientoIzquierda, l.movimientoDerecha, recibidoEn).catch((e) =>
+    console.warn(`[lidar] odometría de ${dispositivoId}: ${(e as Error).message}`),
+  );
+
+  // 4. Y por último, la cola de persistencia.
   encolarLectura(l);
 
-  // 4. Las vistas que leen agregados de Postgres se enteran cada AVISO_CAMBIO_MS.
+  // 5. Las vistas que leen agregados de Postgres se enteran cada AVISO_CAMBIO_MS.
   if (recibidoEn - e.avisadoEn > AVISO_CAMBIO_MS) {
     e.avisadoEn = recibidoEn;
     void emitirCambioRobot(dispositivoId, CLAVES_LECTURA);

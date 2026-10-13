@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/AppLayout.tsx';
 import { AuthProvider, useAuth } from './lib/auth.tsx';
+import { useLidar } from './lib/lidar.tsx';
 import { ProveedorConfirmar } from './lib/confirmar.tsx';
 import { ProveedorPanelTarjetas } from './lib/panel.tsx';
 import { ProveedorRobots } from './lib/robots.tsx';
@@ -10,6 +11,7 @@ import { ProveedorSocket } from './lib/socket.tsx';
 import { ProveedorTema } from './lib/tema.tsx';
 import { ToastProvider, useToast } from './lib/toast.tsx';
 import { Historial } from './pages/Historial.tsx';
+import { Lidar } from './pages/Lidar.tsx';
 import { Login } from './pages/Login.tsx';
 import { Panel } from './pages/Panel.tsx';
 import { Perfil } from './pages/Perfil.tsx';
@@ -60,6 +62,16 @@ function ExigirRol({ rol }: { rol: 'admin' | 'cliente' }) {
   return permitido ? <Outlet /> : <Navigate to={inicioDe(user!.role)} replace />;
 }
 
+/**
+ * La ruta del mapa solo existe con el permiso del modo lidar. Sin él se redirige al inicio sin
+ * decir nada: un aviso de "no tienes acceso" ya delataría que la sección existe (a diferencia
+ * de /admin, donde sí se avisa porque todo el mundo sabe que hay administradores).
+ */
+function SoloLidar() {
+  const { habilitado } = useLidar();
+  return habilitado ? <Lidar /> : <Navigate to="/" replace />;
+}
+
 /** El panel de un admin no es el mismo que el de un cliente. */
 function Inicio() {
   const { user } = useAuth();
@@ -86,6 +98,7 @@ export function App() {
                       <Route path="sesiones" element={<Sesiones />} />
                       <Route path="historial" element={<Historial />} />
                       <Route path="robots" element={<Robots />} />
+                      <Route path="mapa" element={<SoloLidar />} />
                       <Route path="perfil" element={<Perfil />} />
 
                       <Route path="admin" element={<ExigirRol rol="admin" />}>

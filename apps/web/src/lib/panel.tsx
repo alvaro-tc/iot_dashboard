@@ -16,6 +16,7 @@ import {
   Cog,
   Bot,
   Hash,
+  Map,
   Radar,
   Ruler,
   Wifi,
@@ -79,7 +80,17 @@ export const TARJETAS_PANEL = [
     caja: { x: 18, y: 6, w: 6, h: 4 },
     min: { w: 4, h: 3 },
   },
+  // Modo lidar. Solo aparece en el catálogo de quien tiene el permiso (ver Panel.tsx): a los
+  // demás no se les ofrece ni se les dibuja, así que no se enteran de que existe.
+  { id: 'mapa', texto: 'Mapa de la habitación', Icono: Map, caja: { x: 0, y: 0, w: 10, h: 6 }, min: { w: 5, h: 3 } },
 ] as const;
+
+/**
+ * Widgets que solo existen con el permiso del modo lidar. Se filtran del catálogo y no se
+ * dibujan sin él; si a alguien le quitan el permiso teniendo el widget puesto, su caja se
+ * queda guardada (por si se lo devuelven) pero no se pinta nada.
+ */
+export const TARJETAS_SOLO_LIDAR: readonly string[] = ['mapa'];
 
 /**
  * El contador no es un widget mas del catalogo: es una plantilla. Cada vez que se anade desde

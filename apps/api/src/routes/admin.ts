@@ -95,6 +95,9 @@ adminRouter.patch('/users/:id', async (req, res) => {
       email: emailSchema.optional(),
       role: rolSchema.optional(),
       isActive: z.boolean().optional(),
+      // Permiso del modo lidar (mapeo de habitaciones). Quitarlo tiene que hacer desaparecer la
+      // función del cliente, no solo esconderla: ver más abajo el disconnectUser.
+      lidarHabilitado: z.boolean().optional(),
     }),
     req.body,
   );
@@ -109,9 +112,10 @@ adminRouter.patch('/users/:id', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `UPDATE usuarios SET nombre = coalesce($2, nombre), correo = coalesce($3, correo),
-                           rol = coalesce($4, rol), activo = coalesce($5, activo)
+                           rol = coalesce($4, rol), activo = coalesce($5, activo),
+                           lidar_habilitado = coalesce($6, lidar_habilitado)
        WHERE id = $1 RETURNING ${USER_COLUMNS}`,
-      [id, body.name ?? null, body.email ?? null, body.role ?? null, body.isActive ?? null],
+      [id, body.name ?? null, body.email ?? null, body.role ?? null, body.isActive ?? null, body.lidarHabilitado ?? null],
     );
     actualizado = rows[0];
   } catch (e) {
@@ -126,6 +130,10 @@ adminRouter.patch('/users/:id', async (req, res) => {
     disconnectUser(id);
   }
   if (body.role && body.role !== objetivo.role) disconnectUser(id); // que reconecte con el rol nuevo
+  // El permiso del lidar se decide al unirse a la sala (qué eventos recibe) y al cargar el
+  // usuario (qué menú y qué rutas tiene), así que para que el cambio sea inmediato y completo
+  // hay que echar sus sockets: al reconectar, la función aparece o desaparece entera.
+  if (body.lidarHabilitado !== undefined && body.lidarHabilitado !== objetivo.lidarHabilitado) disconnectUser(id);
   if (body.isActive !== undefined && body.isActive !== objetivo.isActive) await sincronizarBrokerSuave();
   emitirCambio(CLAVES_USUARIOS, id);
   res.json(actualizado);

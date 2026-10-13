@@ -25,9 +25,19 @@ import { actualizarConfiguracion, configSchema, configuracionDe } from './config
 import { pool } from './db.ts';
 import { flotaRobots, listaDispositivos, listaUsuarios, resumenDe, resumenFlota, sesionesDe } from './consultas.ts';
 import { guardarPreferencia, preferenciasDe } from './preferencias.ts';
+import { ajustesDe, salasDe } from './lidar/datos.ts';
+import { estadoCompleto } from './lidar/mapeo.ts';
+import { lidarHabilitado } from './routes/lidar.ts';
 import { historialDe } from './telemetria.ts';
 
 const sala = (dispositivoId: string) => `robot:${dispositivoId}`;
+/**
+ * Sala aparte para el modo lidar. No basta con no pintar el menú: si los eventos `lidar`
+ * fueran a la sala del robot, un cliente sin el permiso los recibiría igual y le bastaría
+ * abrir las herramientas del navegador para ver que la función existe. Solo entran aquí los
+ * sockets cuya cuenta tiene el permiso.
+ */
+const salaLidar = (dispositivoId: string) => `lidar:${dispositivoId}`;
 const salaUsuario = (usuarioId: number) => `usuario:${usuarioId}`;
 const SALA_ADMINS = 'admins';
 
@@ -110,6 +120,8 @@ export function attachWebSocket(server: HttpServer): Server {
         return;
       }
       await socket.join(sala(dispositivoId));
+      const conLidar = user.role === 'admin' || (await lidarHabilitado(user.id));
+      if (conLidar) await socket.join(salaLidar(dispositivoId));
 
       // Estado inicial de golpe: así el panel no arranca vacío esperando la siguiente lectura.
       const { rows } = await pool.query(
@@ -122,11 +134,16 @@ export function attachWebSocket(server: HttpServer): Server {
         estado: rows[0] ?? null,
         config: await configuracionDe(dispositivoId),
         historial: historialDe(dispositivoId),
+        // El estado del mapeo (con el mapa guardado, si lo hay) viaja en el mismo ack: así el
+        // plano aparece dibujado al abrir el panel, sin esperar al siguiente barrido.
+        lidar: conLidar ? await estadoCompleto(dispositivoId, (await ajustesDe(dispositivoId)).salaActivaId) : undefined,
       });
     });
 
     socket.on('salir', (dispositivoId: unknown) => {
-      if (typeof dispositivoId === 'string') void socket.leave(sala(dispositivoId));
+      if (typeof dispositivoId !== 'string') return;
+      void socket.leave(sala(dispositivoId));
+      void socket.leave(salaLidar(dispositivoId));
     });
 
     socket.on('actualizar_config', async (payload: unknown, ack?: (r: unknown) => void) => {
@@ -159,6 +176,9 @@ const aSala = (dispositivoId: string, evento: string, payload: unknown) =>
 export const emitirTelemetria = (dispositivoId: string, l: Lectura) => aSala(dispositivoId, 'telemetria', l);
 export const emitirConfig = (dispositivoId: string, cfg: unknown) => aSala(dispositivoId, 'config', cfg);
 export const emitirEstado = (dispositivoId: string, estado: unknown) => aSala(dispositivoId, 'estado', estado);
+/** Modo lidar: estado del mapeo y, cuando cambia, la rejilla. Solo a la sala del robot. */
+export const emitirLidar = (dispositivoId: string, payload: unknown) =>
+  io?.of('/live').to(salaLidar(dispositivoId)).emit('lidar', payload);
 
 /**
  * Recalcula la vista `clave`. `undefined` = no se puede empujar y toca invalidar: o no es
@@ -177,6 +197,11 @@ async function calcular(clave: string, user: AuthUser, dispositivoId?: string): 
       return listaUsuarios();
     case 'sesiones':
       return dispositivoId ? sesionesDe(dispositivoId) : undefined;
+    case 'salas':
+      // Solo para quien tiene el modo lidar: a los demás no se les empuja ni la lista vacía.
+      return dispositivoId && (user.role === 'admin' || (await lidarHabilitado(user.id)))
+        ? salasDe(dispositivoId)
+        : undefined;
     case 'resumen':
       return dispositivoId ? resumenDe(dispositivoId) : undefined;
     default:
@@ -190,7 +215,7 @@ async function calcular(clave: string, user: AuthUser, dispositivoId?: string): 
  * empujado acabaría en una entrada de la caché que nadie mira. Ver ws.check.ts.
  */
 export const claveDe = (vista: string, dispositivoId?: string): unknown[] =>
-  vista === 'sesiones' || vista === 'resumen' ? [vista, dispositivoId] : [vista];
+  vista === 'sesiones' || vista === 'resumen' || vista === 'salas' ? [vista, dispositivoId] : [vista];
 
 const hayAlguien = (sala: string) => (io?.of('/live').adapter.rooms.get(sala)?.size ?? 0) > 0;
 

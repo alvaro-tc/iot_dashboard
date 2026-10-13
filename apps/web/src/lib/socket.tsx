@@ -15,13 +15,31 @@ import {
   type ReactNode,
 } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Configuracion, Lectura } from '@iot/shared';
+import type { Configuracion, Lectura, Obstaculo, Pose } from '@iot/shared';
 import { io, type Socket } from 'socket.io-client';
 import { SOCKET_URL, tokenStore } from './api.ts';
 import { useAuth } from './auth.tsx';
 import { decidir, type Entrada } from './prefs.ts';
 
 export type EstadoSocket = 'conectando' | 'conectado' | 'reconectando' | 'sin-conexion';
+
+/**
+ * Estado del mapeo que manda el backend (apps/api/src/lidar/mapeo.ts). Llega por el ack de
+ * `unirse` (con el mapa guardado, para que el plano aparezca ya dibujado) y después en cada
+ * evento `lidar`. El servidor solo lo manda a quien tiene el permiso, así que a un cliente sin
+ * él esto se queda en null para siempre.
+ */
+export interface EstadoLidar {
+  modo: 'inactivo' | 'calibrando_giro' | 'calibrando_avance' | 'reconociendo' | 'limpiando';
+  salaId: number | null;
+  pose: Pose | null;
+  barridos: number;
+  cobertura: number;
+  residuoCm: number | null;
+  obstaculos: Obstaculo[];
+  aviso: string | null;
+  rejilla?: { datos: string; cols: number; filas: number; res: number };
+}
 
 export interface EstadoRobot {
   enLinea: boolean;
@@ -53,6 +71,8 @@ interface ValorSocket {
    */
   prefs: Record<string, Entrada> | null;
   guardarPref: (clave: string, entrada: Entrada) => void;
+  /** Modo lidar: null si la cuenta no tiene el permiso (el servidor no manda nada). */
+  lidar: EstadoLidar | null;
 }
 
 const ContextoSocket = createContext<ValorSocket>(null!);
@@ -69,6 +89,7 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<Configuracion | null>(null);
   const [estadoRobot, setEstadoRobot] = useState<EstadoRobot | null>(null);
   const [prefs, setPrefs] = useState<Record<string, Entrada> | null>(null);
+  const [lidar, setLidar] = useState<EstadoLidar | null>(null);
 
   const socketRef = useRef<Socket | null>(null);
   const historialRef = useRef<Lectura[]>([]);
@@ -80,13 +101,24 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
   salaRef.current = robotId;
 
   const unirse = useCallback((socket: Socket, id: string) => {
-    socket.emit('unirse', id, (r: { ok: boolean; config?: Configuracion; estado?: EstadoRobot; historial?: Lectura[] }) => {
-      if (!r?.ok) return;
-      historialRef.current = r.historial ?? [];
-      setConfig(r.config ?? null);
-      setEstadoRobot(r.estado ?? null);
-      setIdConexion((n) => n + 1);
-    });
+    socket.emit(
+      'unirse',
+      id,
+      (r: {
+        ok: boolean;
+        config?: Configuracion;
+        estado?: EstadoRobot;
+        historial?: Lectura[];
+        lidar?: EstadoLidar;
+      }) => {
+        if (!r?.ok) return;
+        historialRef.current = r.historial ?? [];
+        setConfig(r.config ?? null);
+        setEstadoRobot(r.estado ?? null);
+        setLidar(r.lidar ?? null);
+        setIdConexion((n) => n + 1);
+      },
+    );
   }, []);
 
   useEffect(() => {
@@ -132,6 +164,11 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
       setPrefs((prev) => ({ ...(prev ?? {}), [clave]: { valor, ts } })),
     );
     socket.on('estado', (e: EstadoRobot) => setEstadoRobot(e));
+    // El mapa en vivo. La rejilla solo viene cuando ha cambiado (una vez por barrido), así que
+    // si el mensaje no la trae se conserva la que había y solo se actualizan pose y obstáculos.
+    socket.on('lidar', (e: EstadoLidar) =>
+      setLidar((prev) => ({ ...e, rejilla: e.rejilla ?? prev?.rejilla })),
+    );
 
     // Lo que cambia en Postgres llega ya calculado y se mete en la caché de react-query:
     // la vista que lo esté usando se redibuja sin un solo GET. Es lo que mantiene vivas las
@@ -166,6 +203,7 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
     historialRef.current = [];
     setConfig(null);
     setEstadoRobot(null);
+    setLidar(null); // otro robot es otro mapa: no se hereda el del anterior
     if (robotId && socket.connected) unirse(socket, robotId);
   }, [robotId, unirse]);
 
@@ -184,6 +222,7 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
         oyentesTel.current.add(fn);
         return () => void oyentesTel.current.delete(fn);
       },
+      lidar,
       prefs,
       guardarPref: (clave, entrada) => {
         setPrefs((prev) => ({ ...(prev ?? {}), [clave]: entrada }));
@@ -204,7 +243,7 @@ export function ProveedorSocket({ children }: { children: ReactNode }) {
           });
         }),
     }),
-    [estado, idConexion, robotId, config, estadoRobot, prefs],
+    [estado, idConexion, robotId, config, estadoRobot, prefs, lidar],
   );
 
   return <ContextoSocket.Provider value={valor}>{children}</ContextoSocket.Provider>;
