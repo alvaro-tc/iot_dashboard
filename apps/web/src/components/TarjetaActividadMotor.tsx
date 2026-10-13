@@ -45,6 +45,10 @@ const desdeDe = (alcance: Alcance) =>
 const sentido = (v: number | null) =>
   v === null ? '—' : Math.abs(v) < 1 ? 'parado' : `${v > 0 ? 'adelante' : 'atrás'} ${Math.abs(Math.round(v))}`;
 
+/** Paso de rejilla "redondo": sin esto, Chart.js reparte los ticks como le da la gana y
+ *  con un techo como 255 solo caen 200 y el borde (255). */
+const pasoEje = (techo: number) => [10, 20, 25, 50, 100, 150, 200].find((p) => techo / p <= 4) ?? 250;
+
 export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcance: Alcance }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
@@ -135,6 +139,9 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
             ticks: {
               color: colores.tintaSuave,
               maxTicksLimit: 5,
+              maxRotation: 0,
+              minRotation: 0,
+              autoSkipPadding: 20,
               callback: (v) =>
                 new Date(Number(v)).toLocaleString(
                   'es',
@@ -150,7 +157,11 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
             grid: { color: colores.borde },
             border: { display: false },
             // Sin signo en el eje: el signo lo dice el lado del cero, y "-180" repetido ensucia.
-            ticks: { color: colores.tintaSuave, maxTicksLimit: 5, callback: (v) => String(Math.abs(Number(v))) },
+            ticks: {
+              color: colores.tintaSuave,
+              stepSize: pasoEje(techo),
+              callback: (v) => String(Math.abs(Number(v))),
+            },
           },
         },
       },
