@@ -105,7 +105,7 @@ export function BarraSuperior() {
     <div ref={contenedor} className="sticky top-0 z-20 px-3 pt-3 pb-2 sm:px-6 sm:pt-4">
       <div className="flex items-center gap-1 rounded-[var(--radius-tarjeta)] border border-borde bg-tarjeta px-2 py-2 shadow-[0_1px_2px_rgba(28,25,23,0.04)] sm:gap-3 sm:px-4 sm:py-2.5">
         {/* Selector del robot activo */}
-        <div className="relative min-w-0 flex-1">
+        <div className="relative min-w-0 shrink">
           <button
             type="button"
             aria-expanded={abierto === 'robot'}
@@ -238,6 +238,8 @@ export function BarraSuperior() {
             )}
           </div>
         )}
+
+        <div className="flex-1" />
 
         {/* Campana */}
         <div className="relative shrink-0">
