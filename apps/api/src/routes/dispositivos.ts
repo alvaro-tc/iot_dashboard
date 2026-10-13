@@ -14,6 +14,7 @@ import { COLUMNAS_DISPOSITIVO, listaDispositivos } from '../consultas.ts';
 import { pool } from '../db.ts';
 import { env } from '../env.ts';
 import { HttpError, parse } from '../http.ts';
+import { elegirSalaActiva, salaPorNombre } from '../lidar/datos.ts';
 import { addDevice, removeDevices } from '../mqtt/broker-credentials.ts';
 import { cerrarSesion } from '../sesiones.ts';
 import { cifrarToken, descifrarToken } from '../token-robot.ts';
@@ -24,6 +25,8 @@ const idCorto = customAlphabet('0123456789abcdefghijklmnopqrstuvwxyz', 8);
 
 /** Lo que deja obsoleto dar de alta, renombrar o dar de baja un robot. */
 const CLAVES_ROBOTS = ['dispositivos', 'admin-robots', 'admin-resumen', 'admin-users'];
+/** Igual, más la lista de habitaciones: la ubicación del robot es una de ellas. */
+const CLAVES_ROBOTS_Y_SALAS = [...CLAVES_ROBOTS, 'salas'];
 
 const BROKER_CAIDO =
   'No se pudo actualizar el broker MQTT. Comprueba que Mosquitto está en marcha e inténtalo de nuevo.';
@@ -93,7 +96,14 @@ dispositivosRouter.patch('/:id', async (req, res) => {
      WHERE id = $1 RETURNING ${COLUMNAS_DISPOSITIVO}`,
     [req.params.id, body.nombre ?? null, body.ubicacion ?? null],
   );
-  emitirCambioRobot(req.params.id, CLAVES_ROBOTS);
+  // La ubicación es el cuarto en el que está: si coincide con una habitación suya, esa pasa a
+  // ser la activa. Así elegir ubicación y elegir habitación son la misma cosa, se haga desde
+  // la tarjeta del robot o desde el plano.
+  if (body.ubicacion) {
+    const salaId = await salaPorNombre(req.params.id, body.ubicacion);
+    if (salaId !== null) await elegirSalaActiva(req.params.id, salaId);
+  }
+  emitirCambioRobot(req.params.id, CLAVES_ROBOTS_Y_SALAS);
   res.json(rows[0]);
 });
 

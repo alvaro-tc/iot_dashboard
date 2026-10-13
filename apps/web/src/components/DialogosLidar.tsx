@@ -1,5 +1,5 @@
-// Diálogos del modo lidar: crear o editar una habitación (rectangular, en L o dibujada),
-// dibujar las puertas, calibrar el robot y ajustar sus medidas.
+// Diálogos del modo lidar: crear o editar una habitación (sin dibujo, rectangular, en L,
+// a escuadra o a mano alzada), dibujar las puertas, calibrar el robot y ajustar sus medidas.
 //
 // Van juntos en un archivo porque comparten el editor de planta y los textos, y porque cada
 // uno por separado serían cien líneas de las que la mitad es el mismo formulario.
@@ -20,12 +20,21 @@ import {
   type Sensor,
 } from '@iot/shared';
 import { NOMBRE_SENSOR } from '../lib/formato.ts';
+import { useColoresTema } from '../lib/tema.tsx';
 import { useLidar, type SalaConMapa } from '../lib/lidar.tsx';
 import { useToast } from '../lib/toast.tsx';
 import { MapaSala } from './MapaSala.tsx';
 import { Modal, Segmentado } from './ui.tsx';
 
-type Forma = 'rectangulo' | 'l' | 'dibujada';
+type Forma = 'auto' | 'rectangulo' | 'l' | 'escuadra' | 'libre';
+
+/**
+ * Cuarto de partida cuando no se dibuja nada. No es un dato, es una semilla: el robot mide el
+ * de verdad al reconocerlo y guarda la medida (anchoRealCm). 5 × 4 m es un cuarto corriente.
+ * ponytail: semilla fija; si la habitación es mucho mayor, la rejilla se recorta a esta caja y
+ * hay que elegir "Rectangular" y dar el tamaño a mano.
+ */
+const SEMILLA_AUTO = { ancho: 500, alto: 400 };
 
 /** Rejilla a la que se pegan los vértices: 10 cm es el detalle que un sonar puede sostener. */
 const PASO_CM = 10;
@@ -36,29 +45,36 @@ const redondear = (v: number) => Math.round(v / PASO_CM) * PASO_CM;
 // ---------------------------------------------------------------------------
 
 /**
- * Dibuja la planta a clics. Cada vértice nuevo se alinea con el anterior en horizontal o en
- * vertical (la que esté más cerca de donde se hizo clic), así que **todas las paredes salen
- * rectas** por construcción: no hay forma de dibujar una pared torcida, que es justo lo que
- * pide el enunciado y lo que el encaje contra las paredes necesita.
+ * Dibuja la planta a clics, en dos modos:
+ *
+ *   a escuadra  cada vértice se alinea con el anterior en horizontal o en vertical, así que
+ *               todas las paredes salen rectas por construcción. Es lo que mejor encaja.
+ *   libre       el punto cae donde se toca, en diagonal si hace falta: triángulos, paredes en
+ *               ángulo, cuartos con un chaflán. Nada más cambia — el encaje trabaja contra las
+ *               aristas del polígono, le da igual que no sean ortogonales.
  */
 function EditorPlanta({
   vertices,
   onCambiar,
   anchoCm,
   altoCm,
+  libre = false,
 }: {
   vertices: Punto[];
   onCambiar: (v: Punto[]) => void;
   anchoCm: number;
   altoCm: number;
+  /** true = a mano alzada (diagonales permitidas); false = paredes en cruz. */
+  libre?: boolean;
 }) {
   const lienzoRef = useRef<HTMLCanvasElement | null>(null);
   const [raton, setRaton] = useState<Punto | null>(null);
+  const { tema } = useColoresTema();
 
-  /** Punto siguiente ya alineado con el último: en cruz, nunca en diagonal. */
+  /** Punto siguiente: tal cual en libre, y alineado con el último (en cruz) a escuadra. */
   const alinear = (p: Punto): Punto => {
     const ultimo = vertices[vertices.length - 1];
-    if (!ultimo) return { x: redondear(p.x), y: redondear(p.y) };
+    if (libre || !ultimo) return { x: redondear(p.x), y: redondear(p.y) };
     const dx = Math.abs(p.x - ultimo.x);
     const dy = Math.abs(p.y - ultimo.y);
     return dx >= dy ? { x: redondear(p.x), y: ultimo.y } : { x: ultimo.x, y: redondear(p.y) };
@@ -92,10 +108,11 @@ function EditorPlanta({
     const X = (x: number) => ox + x * escala;
     const Y = (y: number) => oy + y * escala;
 
-    ctx.fillStyle = '#0f172a';
+    const oscuro = tema === 'oscuro';
+    ctx.fillStyle = oscuro ? '#060b16' : '#fffdfa';
     ctx.fillRect(0, 0, w, h);
     // Retícula de 50 cm.
-    ctx.strokeStyle = 'rgba(148,163,184,0.16)';
+    ctx.strokeStyle = oscuro ? 'rgba(148,163,184,0.16)' : 'rgba(120,113,108,0.22)';
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let x = 0; x <= anchoCm; x += 50) {
@@ -116,13 +133,13 @@ function EditorPlanta({
         const a = alinear(raton);
         ctx.lineTo(X(a.x), Y(a.y));
       }
-      ctx.strokeStyle = '#7dd3fc';
+      ctx.strokeStyle = oscuro ? '#7dd3fc' : '#0f172a';
       ctx.lineWidth = 2.5;
       ctx.stroke();
 
       if (vertices.length >= 3) {
         ctx.setLineDash([5, 5]);
-        ctx.strokeStyle = 'rgba(125,211,252,0.45)';
+        ctx.strokeStyle = oscuro ? 'rgba(125,211,252,0.45)' : 'rgba(15,23,42,0.35)';
         ctx.beginPath();
         ctx.moveTo(X(vertices[vertices.length - 1].x), Y(vertices[vertices.length - 1].y));
         ctx.lineTo(X(vertices[0].x), Y(vertices[0].y));
@@ -131,7 +148,7 @@ function EditorPlanta({
       }
 
       for (const [i, v] of vertices.entries()) {
-        ctx.fillStyle = i === 0 ? '#f97316' : '#ffffff';
+        ctx.fillStyle = i === 0 ? '#f97316' : oscuro ? '#ffffff' : '#0f172a';
         ctx.beginPath();
         ctx.arc(X(v.x), Y(v.y), 4.5, 0, Math.PI * 2);
         ctx.fill();
@@ -142,11 +159,12 @@ function EditorPlanta({
   return (
     <div>
       <canvas
+        key={tema}
         ref={(n) => {
           lienzoRef.current = n;
           pintar(n);
         }}
-        className="h-[260px] w-full cursor-crosshair rounded-2xl"
+        className="h-[260px] w-full cursor-crosshair rounded-2xl border border-borde"
         onPointerMove={(e) => {
           setRaton(aCm(e));
           pintar(lienzoRef.current);
@@ -163,7 +181,9 @@ function EditorPlanta({
       <div className="mt-2 flex items-center gap-2">
         <p className="flex-1 text-[12px] text-tinta-suave">
           {vertices.length === 0
-            ? 'Toca una esquina para empezar. Cada pared sale recta sola.'
+            ? libre
+              ? 'Toca cada esquina. Van donde las pongas, en diagonal si hace falta.'
+              : 'Toca una esquina para empezar. Cada pared sale recta sola.'
             : `${vertices.length} esquina(s). La última pared se cierra con la primera.`}
         </p>
         <button
@@ -193,16 +213,19 @@ export function DialogoSala({ sala, onCerrar }: { sala?: SalaConMapa | null; onC
   const toast = useToast();
   const [nombre, setNombre] = useState(sala?.nombre ?? '');
   const [forma, setForma] = useState<Forma>(
-    sala ? (sala.forma === 'poligono' ? 'dibujada' : 'rectangulo') : 'rectangulo',
+    sala ? (sala.forma === 'poligono' ? 'escuadra' : 'rectangulo') : 'auto',
   );
   const [ancho, setAncho] = useState(sala?.anchoEstimadoCm ?? 400);
   const [alto, setAlto] = useState(sala?.altoEstimadoCm ?? 300);
   const [recorteAncho, setRecorteAncho] = useState(150);
   const [recorteAlto, setRecorteAlto] = useState(120);
   const [dibujados, setDibujados] = useState<Punto[]>(sala?.forma === 'poligono' ? sala.vertices : []);
+  const dibujando = forma === 'escuadra' || forma === 'libre';
   const [error, setError] = useState<string | null>(null);
 
   const vertices = useMemo(() => {
+    // Sin dibujo: se parte de un cuarto corriente y el robot lo mide al reconocerlo.
+    if (forma === 'auto') return rectangulo(SEMILLA_AUTO.ancho, SEMILLA_AUTO.alto);
     if (forma === 'rectangulo') return rectangulo(ancho, alto);
     if (forma === 'l') return formaL(ancho, alto, recorteAncho, recorteAlto);
     return dibujados;
@@ -218,7 +241,7 @@ export function DialogoSala({ sala, onCerrar }: { sala?: SalaConMapa | null; onC
         nombre: nombre.trim(),
         // Para el backend solo hay dos formas: un rectángulo (4 vértices) o un polígono. La L y
         // la dibujada son polígonos; la distinción solo sirve para saber qué editor ofrecer.
-        forma: (forma === 'rectangulo' ? 'rectangulo' : 'poligono') as Sala['forma'],
+        forma: (forma === 'rectangulo' || forma === 'auto' ? 'rectangulo' : 'poligono') as Sala['forma'],
         vertices,
         // Lo estimado es la caja de lo que ha dibujado: es lo que semilla el encaje.
         anchoEstimadoCm: Math.round(medidas!.ancho),
@@ -264,25 +287,31 @@ export function DialogoSala({ sala, onCerrar }: { sala?: SalaConMapa | null; onC
               valor={forma}
               onCambiar={(v) => setForma(v as Forma)}
               opciones={[
+                { valor: 'auto', texto: 'Sin dibujo' },
                 { valor: 'rectangulo', texto: 'Rectangular' },
                 { valor: 'l', texto: 'En L' },
-                { valor: 'dibujada', texto: 'Dibujarla' },
+                { valor: 'escuadra', texto: 'A escuadra' },
+                { valor: 'libre', texto: 'Dibujo libre' },
               ]}
             />
             <p className="mt-1.5 text-[12px] text-tinta-suave">
-              {forma === 'rectangulo'
-                ? 'Cuatro paredes. Lo más común y lo que mejor encaja.'
-                : forma === 'l'
-                  ? 'Un rectángulo con una esquina recortada.'
-                  : 'Tócala esquina a esquina. Las paredes salen rectas solas.'}
+              {forma === 'auto'
+                ? `No dibujas nada: el robot recorre el cuarto y lo mide él. Se parte de ${SEMILLA_AUTO.ancho / 100} × ${SEMILLA_AUTO.alto / 100} m como referencia, y si el tuyo es bastante mayor mejor elige «Rectangular» y dale el tamaño.`
+                : forma === 'rectangulo'
+                  ? 'Cuatro paredes. Lo más común y lo que mejor encaja.'
+                  : forma === 'l'
+                    ? 'Un rectángulo con una esquina recortada.'
+                    : forma === 'escuadra'
+                      ? 'Tócala esquina a esquina. Las paredes salen rectas solas.'
+                      : 'A mano alzada: las esquinas van donde las pongas, en diagonal si hace falta (un triángulo, un chaflán).'}
             </p>
           </div>
 
-          {forma !== 'dibujada' && (
+          {forma !== 'auto' && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="etiqueta" htmlFor="sala-ancho">
-                  Ancho (cm)
+                  {dibujando ? 'Ancho del lienzo (cm)' : 'Ancho (cm)'}
                 </label>
                 <input
                   id="sala-ancho"
@@ -297,7 +326,7 @@ export function DialogoSala({ sala, onCerrar }: { sala?: SalaConMapa | null; onC
               </div>
               <div>
                 <label className="etiqueta" htmlFor="sala-alto">
-                  Largo (cm)
+                  {dibujando ? 'Largo del lienzo (cm)' : 'Largo (cm)'}
                 </label>
                 <input
                   id="sala-alto"
@@ -362,8 +391,14 @@ export function DialogoSala({ sala, onCerrar }: { sala?: SalaConMapa | null; onC
 
         <div>
           <span className="etiqueta">Vista previa</span>
-          {forma === 'dibujada' ? (
-            <EditorPlanta vertices={dibujados} onCambiar={setDibujados} anchoCm={ancho} altoCm={alto} />
+          {dibujando ? (
+            <EditorPlanta
+              vertices={dibujados}
+              onCambiar={setDibujados}
+              anchoCm={ancho}
+              altoCm={alto}
+              libre={forma === 'libre'}
+            />
           ) : (
             <div className="h-[260px] overflow-hidden rounded-2xl">
               <MapaSala sala={{ vertices, puertas: [] }} etiquetas />

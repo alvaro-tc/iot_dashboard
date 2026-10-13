@@ -71,7 +71,12 @@ async function exigirSala(salaId: string, user: { id: number; role: string }): P
   return id;
 }
 
-const CLAVES_SALAS = ['salas'];
+/**
+ * `dispositivos` va con `salas` porque la ubicación del robot es el nombre de su habitación
+ * activa (ver `elegirSalaActiva`): al cambiar de cuarto, renombrarlo o borrarlo, la tarjeta del
+ * robot tiene que decir otra cosa.
+ */
+const CLAVES_SALAS = ['salas', 'dispositivos'];
 
 // ---------------------------------------------------------------------------
 // Habitaciones de un robot

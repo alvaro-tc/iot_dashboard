@@ -161,6 +161,29 @@ const MUEBLES_L = rect(120, 120, 90, 50);
 pruebaEncaje('en L, semilla desviada', SALA_L, MUEBLES_L, { x: 150, y: 250, th: 100 }, { x: 185, y: 220, th: 118 });
 pruebaEncaje('en L, en el brazo corto', SALA_L, MUEBLES_L, { x: 380, y: 140, th: 310 }, { x: 350, y: 160, th: 330 });
 
+// Dibujo libre: un cuarto con paredes en diagonal (aquí un triángulo). El panel deja dibujarlo
+// a mano alzada, así que hay que comprobar que el encaje no dependía de que las paredes fueran
+// ortogonales: trabaja contra las aristas del polígono, le da igual su ángulo.
+const SALA_TRIANGULO: Punto[] = [
+  { x: 0, y: 0 },
+  { x: 500, y: 0 },
+  { x: 250, y: 420 },
+];
+const MUEBLES_TRIANGULO = rect(250, 120, 90, 50);
+pruebaEncaje(
+  'triángulo (dibujo libre), semilla desviada',
+  SALA_TRIANGULO,
+  MUEBLES_TRIANGULO,
+  { x: 250, y: 150, th: 70 },
+  { x: 220, y: 175, th: 88 },
+);
+comprobar(
+  'triángulo: tres paredes, y el centro cae dentro',
+  paredesDe({ vertices: SALA_TRIANGULO, puertas: [] }).length === 3 &&
+    dentroDelPoligono(250, 140, SALA_TRIANGULO) &&
+    !dentroDelPoligono(20, 400, SALA_TRIANGULO),
+);
+
 // Encaje GLOBAL, y el techo honesto de un sonar en una sala simétrica.
 //
 // Al reconocer una habitación por primera vez no se sabe dónde está el robot: lo único

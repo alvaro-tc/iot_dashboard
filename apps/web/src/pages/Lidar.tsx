@@ -1,6 +1,5 @@
 // Página del modo lidar: el plano de la habitación en vivo y el menú de acciones.
 //
-//   arriba       selector de la habitación en la que se está trabajando
 //   centro       el plano, dibujándose en tiempo real
 //   derecha      limpiar, reconocer, re-escanear, puertas, calibrar
 //
@@ -148,25 +147,8 @@ export function Lidar() {
             </p>
           </div>
 
-          {/* Selector de la habitación en la que se trabaja, arriba, como se pidió. */}
-          {lidar.salas.length > 0 && (
-            <label className="flex items-center gap-2 text-[13px]">
-              <span className="sr-only">Habitación</span>
-              <select
-                className="campo h-10 w-auto cursor-pointer pr-8"
-                value={sala?.id ?? ''}
-                disabled={ocupado}
-                onChange={(e) => lidar.elegirSala.mutate(Number(e.target.value))}
-              >
-                {lidar.salas.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.nombre}
-                    {s.mapa ? ` · ${pct(s.mapa.cobertura)}` : ' · sin mapear'}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
+          {/* Cuál es la habitación activa se elige en la barra de arriba, al lado del robot:
+              es la misma elección en todo el dashboard y no tiene por qué vivir dos veces. */}
           <button type="button" className="btn btn-sm" onClick={() => setNuevaSala(true)}>
             <Plus className="size-4" />
             Habitación

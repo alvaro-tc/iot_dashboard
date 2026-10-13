@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { KeyRound, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, errorMessage } from '../lib/api.ts';
+import { useAuth } from '../lib/auth.tsx';
 import { useConfirmar } from '../lib/confirmar.tsx';
 import { haceCuanto, pct } from '../lib/formato.ts';
 import { useRobots } from '../lib/robots.tsx';
@@ -12,11 +13,28 @@ import type { Credenciales, Dispositivo } from '../lib/types.ts';
 import { Credenciales as CredencialesCopiables, DialogoNuevoRobot } from '../components/DialogoNuevoRobot.tsx';
 import { Badge, Esqueleto, Modal, Tarjeta, Vacio } from '../components/ui.tsx';
 
+/**
+ * La ubicación del robot es el cuarto en el que está, así que se elige entre sus habitaciones
+ * (las del modo lidar) en vez de escribirse a mano: al guardarla, esa habitación pasa a ser la
+ * que el robot está trabajando. Queda el texto libre para quien no tenga habitaciones todavía
+ * —o el modo lidar— porque entonces no hay nada a lo que ligarla.
+ */
 function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () => void }) {
   const { recargar } = useRobots();
+  const { user } = useAuth();
   const toast = useToast();
   const [nombre, setNombre] = useState(robot.nombre);
   const [ubicacion, setUbicacion] = useState(robot.ubicacion);
+  const [aMano, setAMano] = useState(false);
+
+  const conLidar = user?.role === 'admin' || user?.lidarHabilitado === true;
+  const salas = useQuery<{ id: number; nombre: string }[]>({
+    queryKey: ['salas', robot.id],
+    queryFn: () => api(`/api/lidar/dispositivos/${robot.id}/salas`),
+    enabled: conLidar,
+  });
+  const cuartos = salas.data ?? [];
+  const eligiendo = cuartos.length > 0 && !aMano;
 
   const guardar = useMutation({
     mutationFn: () => api(`/api/dispositivos/${robot.id}`, { method: 'PATCH', body: { nombre, ubicacion } }),
@@ -44,7 +62,36 @@ function DialogoEditar({ robot, onCerrar }: { robot: Dispositivo; onCerrar: () =
         <label className="etiqueta mt-4" htmlFor="editar-ubicacion">
           Ubicación
         </label>
-        <input id="editar-ubicacion" className="campo" value={ubicacion} onChange={(e) => setUbicacion(e.target.value)} />
+        {eligiendo ? (
+          <>
+            <select
+              id="editar-ubicacion"
+              className="campo cursor-pointer"
+              value={cuartos.some((c) => c.nombre === ubicacion) ? ubicacion : ''}
+              onChange={(e) => (e.target.value === '__otra' ? setAMano(true) : setUbicacion(e.target.value))}
+            >
+              <option value="" disabled>
+                Elige una habitación
+              </option>
+              {cuartos.map((c) => (
+                <option key={c.id} value={c.nombre}>
+                  {c.nombre}
+                </option>
+              ))}
+              <option value="__otra">Otro sitio (escribirlo)…</option>
+            </select>
+            <p className="mt-1.5 text-[12px] text-tinta-suave">
+              Es la habitación en la que está: al guardar, es la que el robot se pone a trabajar en el mapa.
+            </p>
+          </>
+        ) : (
+          <input
+            id="editar-ubicacion"
+            className="campo"
+            value={ubicacion}
+            onChange={(e) => setUbicacion(e.target.value)}
+          />
+        )}
         <div className="mt-6 flex gap-2">
           <button type="button" className="btn flex-1" onClick={onCerrar}>
             Cancelar

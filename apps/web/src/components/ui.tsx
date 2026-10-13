@@ -169,7 +169,7 @@ export function Segmentado<T extends string>({
     <div
       role="group"
       aria-label={etiqueta}
-      className={`inline-flex rounded-full p-1 ${oscuro ? 'bg-white/10 backdrop-blur' : 'bg-tarjeta-tenue'}`}
+      className={`inline-flex flex-wrap rounded-full p-1 ${oscuro ? 'bg-white/10 backdrop-blur' : 'bg-tarjeta-tenue'}`}
     >
       {opciones.map((o) => {
         const activo = o.valor === valor;

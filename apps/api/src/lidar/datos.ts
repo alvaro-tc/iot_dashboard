@@ -349,10 +349,32 @@ export async function guardarCalibracion(dispositivoId: string, calibracion: Cal
   return ajustesDe(dispositivoId);
 }
 
+/**
+ * Pone la habitación en la que trabaja el robot y, con ella, su ubicación: la ubicación ES el
+ * cuarto en el que está, así que se escribe aquí (donde pasan todos los caminos: el selector
+ * del plano, la primera habitación que se crea y el PATCH del robot) en vez de dejar un campo
+ * de texto suelto que se contradiga con el mapa que se está mirando.
+ */
 export async function elegirSalaActiva(dispositivoId: string, salaId: number | null): Promise<void> {
   await pool.query('UPDATE configuracion_dispositivo SET sala_activa_id = $2 WHERE dispositivo_id = $1', [
     dispositivoId,
     salaId,
   ]);
+  if (salaId !== null) {
+    await pool.query(
+      `UPDATE dispositivos d SET ubicacion = s.nombre
+         FROM salas s WHERE s.id = $2 AND s.dispositivo_id = d.id AND d.id = $1`,
+      [dispositivoId, salaId],
+    );
+  }
   olvidarAjustes(dispositivoId);
+}
+
+/** La habitación de este robot que se llama así, si existe. Es lo que liga ubicación y cuarto. */
+export async function salaPorNombre(dispositivoId: string, nombre: string): Promise<number | null> {
+  const { rows } = await pool.query<{ id: number }>(
+    'SELECT id FROM salas WHERE dispositivo_id = $1 AND lower(nombre) = lower($2) LIMIT 1',
+    [dispositivoId, nombre.trim()],
+  );
+  return rows[0] ? Number(rows[0].id) : null;
 }

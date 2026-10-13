@@ -1,11 +1,15 @@
-// Barra superior: selector del robot activo, campana de notificaciones,
-// toggle de tema y menú de usuario.
+// Barra superior: selector del robot activo, selector de la habitación, campana de
+// notificaciones, toggle de tema y menú de usuario.
+//
+// El selector de habitación solo existe con el modo lidar: sin el permiso no se pinta (ni se
+// piden las salas), igual que el menú del plano. Ver lib/lidar.tsx.
 import { useEffect, useRef, useState } from 'react';
-import { Bell, Bot, ChevronDown, Moon, Plus, Sun } from 'lucide-react';
+import { Bell, Bot, ChevronDown, House, Moon, Plus, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { DIST_EVASION_CM, SENSORES_DE } from '@iot/shared';
 import { useAuth } from '../lib/auth.tsx';
 import { haceCuanto } from '../lib/formato.ts';
+import { useLidar } from '../lib/lidar.tsx';
 import { useRobots } from '../lib/robots.tsx';
 import { useTelemetria } from '../lib/socket.tsx';
 import { useTema } from '../lib/tema.tsx';
@@ -33,10 +37,11 @@ export function BarraSuperior() {
   const { user, logout } = useAuth();
   const { tema, alternar } = useTema();
   const { robots, robot, elegir } = useRobots();
+  const lidar = useLidar();
   const toast = useToast();
   const navigate = useNavigate();
 
-  const [abierto, setAbierto] = useState<'usuario' | 'campana' | 'robot' | null>(null);
+  const [abierto, setAbierto] = useState<'usuario' | 'campana' | 'robot' | 'sala' | null>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [notificaciones, setNotificaciones] = useState<Aviso[]>([]);
   const [sinLeer, setSinLeer] = useState(0);
@@ -163,6 +168,76 @@ export function BarraSuperior() {
             </div>
           )}
         </div>
+
+        {/* Selector de la habitación. Cambia la habitación ACTIVA en el servidor (no solo en
+            esta pestaña): el robot y los demás navegadores de la cuenta trabajan sobre la
+            misma, y la ubicación del robot pasa a ser ese cuarto. */}
+        {lidar.habilitado && robot && (
+          <div className="relative min-w-0 shrink">
+            <button
+              type="button"
+              aria-expanded={abierto === 'sala'}
+              aria-label="Habitación activa"
+              disabled={lidar.ocupado}
+              className="flex max-w-full cursor-pointer items-center gap-2 rounded-full px-2 py-1.5 hover:bg-tarjeta-tenue disabled:cursor-not-allowed disabled:opacity-50"
+              onClick={() => setAbierto(abierto === 'sala' ? null : 'sala')}
+            >
+              <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-acento/15 text-acento sm:size-9">
+                <House className="size-5" />
+              </span>
+              <span className="min-w-0 text-left">
+                <span className="block max-w-[24vw] truncate text-[14px] font-medium sm:max-w-[150px]">
+                  {lidar.sala?.nombre ?? 'Sin habitaciones'}
+                </span>
+                <span className="block max-w-[24vw] truncate text-[12px] text-tinta-suave sm:max-w-[150px]">
+                  {lidar.sala?.mapa ? `Mapa ${Math.round(lidar.sala.mapa.cobertura * 100)} %` : 'Sin mapear'}
+                </span>
+              </span>
+              <ChevronDown className="size-4 shrink-0 text-tinta-suave" />
+            </button>
+            {abierto === 'sala' && (
+              <div className="absolute top-12 -left-1 z-30 w-64 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-borde bg-tarjeta shadow-lg">
+                <ul className="max-h-80 overflow-y-auto">
+                  {lidar.salas.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        className={`flex w-full cursor-pointer items-center justify-between gap-2 px-4 py-2.5 text-left text-[14px] hover:bg-tarjeta-tenue ${
+                          s.id === lidar.sala?.id ? 'text-acento' : ''
+                        }`}
+                        onClick={() => {
+                          lidar.elegirSala.mutate(s.id);
+                          setAbierto(null);
+                        }}
+                      >
+                        <span className="truncate">{s.nombre}</span>
+                        <span className="shrink-0 text-[12px] text-tinta-suave">
+                          {s.mapa ? `${Math.round(s.mapa.cobertura * 100)} %` : 'sin mapear'}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                  {lidar.salas.length === 0 && (
+                    <li className="px-4 py-6 text-center text-[13px] text-tinta-suave">
+                      Este robot no tiene habitaciones.
+                    </li>
+                  )}
+                </ul>
+                <button
+                  type="button"
+                  className="flex w-full cursor-pointer items-center gap-2 border-t border-borde px-4 py-2.5 text-left text-[14px] text-acento hover:bg-tarjeta-tenue"
+                  onClick={() => {
+                    setAbierto(null);
+                    navigate('/mapa');
+                  }}
+                >
+                  <Plus className="size-4" />
+                  Habitaciones y mapa
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Campana */}
         <div className="relative shrink-0">

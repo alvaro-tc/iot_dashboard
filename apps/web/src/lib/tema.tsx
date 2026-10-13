@@ -58,8 +58,7 @@ export function useColoresTema() {
     libre: leer('--color-libre', '#10b981'),
     precaucion: leer('--color-precaucion', '#f59e0b'),
     evasion: leer('--color-evasion', '#ef4444'),
-    // El recuadro del mapa y el radar va oscuro en los dos temas, como la cámara de la referencia.
-    lienzoMapa: tema === 'oscuro' ? '#060b16' : '#0f172a',
-    rejillaMapa: tema === 'oscuro' ? '#1e293b' : '#1e293b',
+    // El plano sigue al tema de la cuenta: en claro es papel cuadriculado, en oscuro radar.
+    lienzoMapa: tema === 'oscuro' ? '#060b16' : '#f6ece3',
   };
 }

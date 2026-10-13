@@ -10,8 +10,9 @@
 //     tiraría los 60 fps, y la rejilla solo cambia una vez por barrido.
 //   - Lo que se mueve (el robot, los haces de los sensores, el barrido girando) se redibuja en
 //     cada fotograma encima. Es poca cosa y es lo que da la sensación de tiempo real.
-//   - El recuadro va oscuro en los dos temas, como el radar y como la animación del login: el
-//     mapa es "lo que ve el robot", y eso se lee mejor sobre oscuro.
+//   - Los colores salen de PALETA[tema]: en claro el plano es papel cuadriculado (fondo crema,
+//     paredes de tinta) y en oscuro es radar. Antes iba oscuro en los dos temas y en una
+//     pantalla clara quedaba como un agujero negro en medio del panel.
 //
 // El marco es el de la sala (cm, y hacia abajo, ver packages/shared/src/lidar.ts), que coincide
 // con el del lienzo: no hay que invertir nada, solo escalar.
@@ -59,6 +60,46 @@ const TONO_SENSOR: Record<Sensor, string> = { izquierdo: '#38bdf8', central: '#c
 const SENSORES: Sensor[] = ['izquierdo', 'central', 'derecho'];
 /** Semiancho del haz que se dibuja. Es el del HC-SR04, no un adorno. */
 const SEMIHAZ_DIBUJO = 11;
+
+/**
+ * Los dos juegos de color del plano. Las celdas (libre/ocupado) y los tonos de los sensores no
+ * cambian de tema: son identidad y significado. Lo que cambia es el papel y la tinta.
+ */
+const PALETA = {
+  claro: {
+    fondo0: '#fffdfa',
+    fondo1: '#f6ece3',
+    reticula: 'rgba(120,113,108,0.22)',
+    suelo: 'rgba(255,255,255,0.72)',
+    pared: 'rgba(41,37,36,0.92)',
+    brilloPared: 'rgba(120,113,108,0.28)',
+    chasis: '#1c1917',
+    morro: '#ffffff',
+    texto: 'rgba(68,64,60,0.95)',
+    contorno: 'rgba(255,255,255,0.92)',
+    obstaculoTrazo: 'rgba(194,65,12,0.95)',
+    obstaculoRelleno: 'rgba(249,115,22,0.18)',
+    obstaculoTexto: '#9a3412',
+    /** Alfa de las celdas: sobre papel hacen falta algo más opacas para leerse. */
+    celdas: 1.15,
+  },
+  oscuro: {
+    fondo0: '#070d1a',
+    fondo1: '#060b16',
+    reticula: 'rgba(148,163,184,0.10)',
+    suelo: 'rgba(255,255,255,0.035)',
+    pared: 'rgba(186,230,253,0.95)',
+    brilloPared: 'rgba(56,189,248,0.55)',
+    chasis: '#ffffff',
+    morro: '#0f172a',
+    texto: 'rgba(226,232,240,0.75)',
+    contorno: 'rgba(2,6,23,0.85)',
+    obstaculoTrazo: 'rgba(253,186,116,0.95)',
+    obstaculoRelleno: 'rgba(249,115,22,0.16)',
+    obstaculoTexto: '#fed7aa',
+    celdas: 1,
+  },
+} as const;
 
 /** Cómo se dibuja cada clase de obstáculo. El color dice "esto está ocupado", no el peligro. */
 const ETIQUETA_FORMA: Record<Obstaculo['forma'], string> = {
@@ -108,6 +149,7 @@ export function MapaSala({
     const ctx = off.getContext('2d');
     if (!ctx) return;
     const img = ctx.createImageData(rejilla.cols, rejilla.filas);
+    const alfa = PALETA[colores.tema].celdas;
 
     for (let i = 0; i < rejilla.datos.length; i++) {
       const l = rejilla.datos[i] / ESCALA_LOGODDS;
@@ -118,14 +160,14 @@ export function MapaSala({
         img.data[p] = 255;
         img.data[p + 1] = Math.round(190 - 120 * t);
         img.data[p + 2] = Math.round(90 - 60 * t);
-        img.data[p + 3] = Math.round(140 + 115 * t);
+        img.data[p + 3] = Math.min(255, Math.round((140 + 115 * t) * alfa));
       } else if (l <= UMBRAL_LIBRE) {
         // Libre: verde agua apagado, para que se lea como "sitio por donde pasar" sin competir.
         const t = Math.min(1, (UMBRAL_LIBRE - l) / 6);
         img.data[p] = 16;
         img.data[p + 1] = Math.round(120 + 65 * t);
         img.data[p + 2] = Math.round(110 + 40 * t);
-        img.data[p + 3] = Math.round(40 + 70 * t);
+        img.data[p + 3] = Math.min(255, Math.round((40 + 70 * t) * alfa));
       } else {
         // Sin opinión: transparente. El hueco en el plano ES la información (falta explorar).
         img.data[p + 3] = 0;
@@ -133,7 +175,7 @@ export function MapaSala({
     }
     ctx.putImageData(img, 0, 0);
     capaRejilla.current = off;
-  }, [rejilla]);
+  }, [rejilla, colores.tema]);
 
   useEffect(() => {
     const lienzo = lienzoRef.current;
@@ -149,6 +191,7 @@ export function MapaSala({
       cuadro++;
       const d = datos.current;
       const c = d.colores;
+      const pal = PALETA[c.tema];
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       const ancho = lienzo.clientWidth;
       const alto = lienzo.clientHeight;
@@ -170,13 +213,13 @@ export function MapaSala({
 
       // --- Fondo del recuadro ---
       const fondo = ctx.createLinearGradient(0, 0, 0, alto);
-      fondo.addColorStop(0, c.tema === 'oscuro' ? '#070d1a' : '#111c33');
-      fondo.addColorStop(1, c.lienzoMapa);
+      fondo.addColorStop(0, pal.fondo0);
+      fondo.addColorStop(1, pal.fondo1);
       ctx.fillStyle = fondo;
       ctx.fillRect(0, 0, ancho, alto);
 
       // --- Retícula de medio metro, muy tenue: da escala sin ensuciar ---
-      ctx.strokeStyle = 'rgba(148,163,184,0.10)';
+      ctx.strokeStyle = pal.reticula;
       ctx.lineWidth = 1;
       ctx.beginPath();
       for (let x = 0; x <= cs.ancho; x += 50) {
@@ -196,7 +239,7 @@ export function MapaSala({
 
       ctx.save();
       ctx.clip(camino);
-      ctx.fillStyle = 'rgba(255,255,255,0.035)';
+      ctx.fillStyle = pal.suelo;
       ctx.fillRect(0, 0, ancho, alto);
 
       // --- La rejilla de ocupación, estampada escalada ---
@@ -211,9 +254,9 @@ export function MapaSala({
 
       // --- Las paredes: trazo luminoso por fuera y línea fina por dentro ---
       ctx.save();
-      ctx.shadowColor = 'rgba(56,189,248,0.55)';
+      ctx.shadowColor = pal.brilloPared;
       ctx.shadowBlur = 12;
-      ctx.strokeStyle = 'rgba(186,230,253,0.95)';
+      ctx.strokeStyle = pal.pared;
       ctx.lineWidth = 2.5;
       ctx.lineJoin = 'round';
       ctx.stroke(camino);
@@ -225,7 +268,7 @@ export function MapaSala({
         const enCurso = p === d.puertaEnCurso;
         ctx.save();
         // Se tapa la pared por debajo y se marca el hueco: así se ve que ahí hay paso.
-        ctx.strokeStyle = c.lienzoMapa;
+        ctx.strokeStyle = pal.fondo1;
         ctx.lineWidth = 5;
         ctx.beginPath();
         ctx.moveTo(X(p.x1), Y(p.y1));
@@ -255,8 +298,8 @@ export function MapaSala({
       for (const o of d.obstaculos) {
         ctx.save();
         ctx.translate(X(o.cx), Y(o.cy));
-        ctx.strokeStyle = 'rgba(253,186,116,0.95)';
-        ctx.fillStyle = 'rgba(249,115,22,0.16)';
+        ctx.strokeStyle = pal.obstaculoTrazo;
+        ctx.fillStyle = pal.obstaculoRelleno;
         ctx.lineWidth = 2;
         ctx.shadowColor = 'rgba(249,115,22,0.5)';
         ctx.shadowBlur = 8;
@@ -285,9 +328,9 @@ export function MapaSala({
           ctx.textAlign = 'center';
           const py = Y(o.cy) - (o.forma === 'redondo' ? o.radioCm * escala : (o.altoCm * escala) / 2) - 6;
           ctx.lineWidth = 3;
-          ctx.strokeStyle = 'rgba(2,6,23,0.85)';
+          ctx.strokeStyle = pal.contorno;
           ctx.strokeText(texto, X(o.cx), py);
-          ctx.fillStyle = '#fed7aa';
+          ctx.fillStyle = pal.obstaculoTexto;
           ctx.fillText(texto, X(o.cx), py);
         }
       }
@@ -357,7 +400,7 @@ export function MapaSala({
         ctx.rotate(radianes(d.pose.th));
         ctx.shadowColor = 'rgba(249,115,22,0.55)';
         ctx.shadowBlur = 14;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = pal.chasis;
         ctx.beginPath();
         ctx.arc(0, 0, radio, 0, Math.PI * 2);
         ctx.fill();
@@ -367,7 +410,7 @@ export function MapaSala({
         ctx.arc(0, 0, radio * 0.34, 0, Math.PI * 2);
         ctx.fill();
         // Ruedas (a los lados, perpendiculares al avance) y morro.
-        ctx.fillStyle = '#0f172a';
+        ctx.fillStyle = pal.morro;
         ctx.fillRect(-radio * 0.3, -radio * 1.08, radio * 0.6, radio * 0.26);
         ctx.fillRect(-radio * 0.3, radio * 0.82, radio * 0.6, radio * 0.26);
         ctx.beginPath();
@@ -381,7 +424,7 @@ export function MapaSala({
 
       // --- Cotas de la sala ---
       if (d.etiquetas) {
-        ctx.fillStyle = 'rgba(226,232,240,0.75)';
+        ctx.fillStyle = pal.texto;
         ctx.font = '600 11px system-ui';
         ctx.textAlign = 'center';
         ctx.fillText(`${Math.round(cs.ancho)} cm`, X(cs.ancho / 2), Y(0) - 10);
