@@ -80,7 +80,7 @@ export function TarjetaBateria() {
           <Gauge pct={pct} color={color} conectado={conectado} />
           <div className="pointer-events-none absolute inset-x-0 bottom-0 flex h-[72%] flex-col items-center justify-center">
             <p
-              className={`text-[28px] leading-none font-bold tabular-nums sm:text-[32px] ${conectado ? '' : 'text-tinta-suave'}`}
+              className={`text-[clamp(18px,16cqw,32px)] leading-none font-bold tabular-nums ${conectado ? '' : 'text-tinta-suave'}`}
             >
               {conectado ? Math.round(pct) : '—'}
               {conectado && <span className="ml-0.5 text-[15px] font-semibold text-tinta-suave">%</span>}

@@ -40,10 +40,27 @@ export const ALTO_FILA = 40;
 export const ALTO_FILA_MIN = 36;
 export const MARGEN = 16;
 /**
- * Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. 640 (no 1024):
- * un Fold 6 desplegado mide ~714-830px de ancho CSS, cuadrado y no una tira de móvil normal, así
- * que con el umbral viejo caía en la grilla de una columna y las tarjetas (pensadas para ~375 px)
- * salían estiradas a lo ancho. Por debajo de 640 no cabe ni una columna de la grilla editable.
+ * Suelo del hueco entre tarjetas. Con COLUMNAS=24 hay 23 huecos: a 16px son 368px, más de la
+ * mitad del tablero de un Fold desplegado (~583px una vez descontada la sidebar y el padding),
+ * y la columna se queda en ~9px. El hueco se escala con el ancho (`margenGrilla`) hasta este
+ * suelo, por debajo del cual las tarjetas se tocan y no se distinguen unas de otras.
+ */
+export const MARGEN_MIN = 8;
+/** Hueco entre tarjetas para un tablero de este ancho. Continuo: al plegar/desplegar un Fold no
+ *  da un salto, y en escritorio satura en MARGEN. */
+export const margenGrilla = (ancho: number) =>
+  Math.max(MARGEN_MIN, Math.min(MARGEN, Math.round(ancho / 64)));
+/**
+ * Por debajo de este ancho de VENTANA la grilla colapsa a una columna y no se puede reordenar.
+ * Es el mismo 640 del breakpoint `plegado` (index.css): donde aparece la sidebar en iconos
+ * aparece también la grilla, que es lo que ve un Fold 6 desplegado (~714-830px CSS, cuadrado).
+ *
+ * Se mide sobre la ventana y no sobre la fila a propósito: la fila es la ventana menos el chrome
+ * (sidebar 76px + padding 48px), así que comparándola con 640 la grilla no arrancaba hasta ~764px
+ * de ventana y un Fold desplegado caía en la columna única pensada para ~375px. Y no se puede
+ * bajar el umbral sin más, porque la relación no es monótona: justo por debajo de 640 desaparece
+ * la sidebar y la fila vuelve a ser ancha. La ventana tampoco cambia al abrir el cajón de
+ * widgets, que es lo que hacía falta para no entrar en bucle.
  */
 export const ANCHO_GRILLA = 640;
 /**

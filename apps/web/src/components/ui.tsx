@@ -21,11 +21,22 @@ export function Tarjeta({
 } & ComponentProps<'section'>) {
   return (
     <section className={`tarjeta flex flex-col ${className}`} {...props}>
+      {/* Tarjeta estrecha (un widget de 6 de las 24 columnas en un Fold desplegado son ~140px):
+          truncado, el título se queda en "Estado …" y ya no dice cuál. Se encoge y se deja
+          partir en dos líneas, y el subtítulo desaparece: es contexto, no el dato. El umbral
+          mira la TARJETA (`container-type` en .tarjeta), no la ventana, así que vale igual
+          para un widget estrecho en un escritorio ancho. `wrap-anywhere` porque "Conectividad"
+          es una sola palabra: sin punto de corte el ellipsis se la come igual («Conec…») por
+          mucho que le dejes dos líneas. */}
       {(titulo || accion) && (
-        <header className="mb-4 flex items-start justify-between gap-3">
+        <header className="mb-4 flex items-start justify-between gap-3 @max-[200px]:mb-2 @max-[200px]:gap-1.5">
           <div className="min-w-0">
-            {titulo && <h2 className="tarjeta-titulo truncate">{titulo}</h2>}
-            {subtitulo && <p className="tarjeta-sub truncate">{subtitulo}</p>}
+            {titulo && (
+              <h2 className="tarjeta-titulo truncate @max-[200px]:hyphens-auto @max-[200px]:wrap-anywhere @max-[200px]:text-[14px] @max-[200px]:whitespace-normal">
+                {titulo}
+              </h2>
+            )}
+            {subtitulo && <p className="tarjeta-sub truncate @max-[200px]:hidden">{subtitulo}</p>}
           </div>
           {accion}
         </header>

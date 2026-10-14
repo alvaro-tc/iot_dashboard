@@ -104,7 +104,7 @@ export function TarjetaConectividad() {
       }
     >
       <div className="flex items-end gap-2">
-        <span className="text-[32px] leading-none font-bold tabular-nums">{msgPorSeg}</span>
+        <span className="text-[clamp(18px,16cqw,32px)] leading-none font-bold tabular-nums">{msgPorSeg}</span>
         <span className="pb-1 text-[14px] text-tinta-suave">mensajes/s</span>
       </div>
       <div className="mt-2 h-2 overflow-hidden rounded-full bg-tarjeta-tenue">

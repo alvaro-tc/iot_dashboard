@@ -105,7 +105,7 @@ export function TarjetaEstado() {
         />
       }
     >
-      <p className="text-[26px] leading-tight font-bold">
+      <p className="text-[clamp(15px,14cqw,26px)] leading-tight font-bold">
         {atascado ? 'Atascado' : NOMBRE_MOVIMIENTO[movimiento]}
       </p>
 

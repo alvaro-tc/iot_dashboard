@@ -23,9 +23,9 @@
 // El cajón muestra cada widget en miniatura (el widget de verdad, dibujado a tamaño real y
 // escalado) en dos columnas, para verlos todos sin scroll. Cada widget del tablero saca entonces
 // sus controles de esquina: lápiz para su tamaño y cruz para quitarlo.
-import React, { useCallback, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useState, type ReactNode } from 'react';
 import { Check, LayoutGrid, Pencil, Plus, RotateCcw, X } from 'lucide-react';
-import { ResponsiveGridLayout, useContainerWidth } from 'react-grid-layout';
+import { ResponsiveGridLayout } from 'react-grid-layout';
 import {
   ALTO_FILA,
   ALTO_FILA_MIN,
@@ -42,6 +42,7 @@ import {
   FILAS,
   infoTarjeta,
   MARGEN,
+  margenGrilla,
   MINIATURA,
   PLANTILLA_CONTADOR,
   POR_DEFECTO_VISIBLES,
@@ -73,17 +74,24 @@ import { ErrorConReintento, Esqueleto, Modal, Segmentado, Vacio } from '../compo
 /** Id de la miniatura del contador: no está en el tablero, así que sale con la métrica de fábrica. */
 const PREVIO_CONTADOR = 'contador-previo';
 
-/** Alto libre desde el elemento hasta el borde inferior de la ventana; 0 si no se ajusta. */
-function useAltoLibre(ref: React.RefObject<HTMLElement | null>, activo: boolean) {
+/**
+ * Alto libre desde el elemento hasta el borde inferior de la ventana; 0 si no se ajusta.
+ *
+ * Ref de callback por lo mismo que `useCajaMedida`: mientras cargan los robots el panel
+ * devuelve el esqueleto y este elemento no existe, así que un `useRef` salía del efecto con
+ * `current` a `null` y, como el objeto ref no cambia, no se volvía a medir nunca: el tablero
+ * se quedaba con el alto de fila de reserva y dejaba un hueco muerto debajo.
+ */
+function useAltoLibre(activo: boolean) {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  const ref = useCallback((nodo: HTMLElement | null) => setEl(nodo), []);
   const [alto, setAlto] = useState(0);
   useLayoutEffect(() => {
-    if (!activo) {
+    if (!el || !activo) {
       setAlto(0);
       return;
     }
     const medir = () => {
-      const el = ref.current;
-      if (!el) return;
       // El <main> lleva su propio padding inferior: si no se descuenta, sobra justo ese alto
       // por debajo de la ventana y vuelve a aparecer la barra de scroll.
       const main = el.closest('main');
@@ -93,8 +101,8 @@ function useAltoLibre(ref: React.RefObject<HTMLElement | null>, activo: boolean)
     medir();
     window.addEventListener('resize', medir);
     return () => window.removeEventListener('resize', medir);
-  }, [ref, activo]);
-  return alto;
+  }, [el, activo]);
+  return { ref, alto };
 }
 
 /**
@@ -132,6 +140,18 @@ function useCajaMedida<T extends HTMLElement>() {
     };
   }, [el]);
   return { ref, caja };
+}
+
+/** Ancho de la ventana. Al plegar/desplegar un Fold llega como `resize`, igual que un giro. */
+function useAnchoVentana() {
+  const [ancho, setAncho] = useState(() => window.innerWidth);
+  useLayoutEffect(() => {
+    const medir = () => setAncho(window.innerWidth);
+    medir();
+    window.addEventListener('resize', medir);
+    return () => window.removeEventListener('resize', medir);
+  }, []);
+  return ancho;
 }
 
 /** El widget de verdad, dibujado a tamaño real y escalado: preview fiel sin código aparte. */
@@ -418,35 +438,61 @@ export function Panel() {
   const { robots, robot, cargando, error, recargar } = useRobots();
   const { habilitado: conLidar } = useLidar();
   const { layout, guardarLayout, alternar, alcances } = usePanelTarjetas();
-  const { width, containerRef, mounted } = useContainerWidth();
-  const marcoRef = useRef<HTMLDivElement>(null);
   const [nuevoRobot, setNuevoRobot] = useState(false);
   const [editando, setEditando] = useState(false);
+  const [catalogo, setCatalogo] = useState(false);
   const [widget, setWidget] = useState<IdTarjeta | null>(null);
 
   useResumen(); // calienta la caché que comparten los contadores
 
   // En una sola columna no hay nada que reordenar ni forma de que todo quepa sin scroll: los
-  // tiradores solo estorbarían. Se decide con el ancho de la FILA, que no cambia al abrir el
-  // cajón: con el de la grilla ya encogida, abrirlo bajaría del umbral y el panel entraría en
-  // bucle (cierra edición → la grilla crece → vuelve a caber → abre edición → ...).
+  // tiradores solo estorbarían. Se decide con el ancho de la VENTANA (el mismo umbral que la
+  // sidebar en iconos), no con el de la grilla: con el de la grilla ya encogida, abrir el cajón
+  // bajaría del umbral y el panel entraría en bucle (cierra edición → la grilla crece → vuelve a
+  // caber → abre edición → ...). Ver ANCHO_GRILLA.
   const { ref: filaRef, caja: fila } = useCajaMedida<HTMLDivElement>();
-  const puedeColocar = fila.ancho >= ANCHO_GRILLA;
+  const puedeColocar = useAnchoVentana() >= ANCHO_GRILLA;
   // En un Fold desplegado la fila entera apenas pasa de ANCHO_GRILLA: el cajón fijo (340px) no
   // dejaría casi nada para el tablero. Se encoge con la fila, nunca por debajo de lo legible.
   const anchoLateral = Math.min(ANCHO_LATERAL, Math.max(ANCHO_LATERAL_MIN, fila.ancho * 0.4));
+  // Del ancho de la FILA, no del tablero: abrir el cajón no debe recolocar toda la grilla.
+  const margen = margenGrilla(fila.ancho);
   const edicionActiva = editando && puedeColocar;
+  /**
+   * El cajón solo va al lado si al tablero le queda sitio para seguir siendo una grilla. En un
+   * Fold desplegado la fila mide ~583px: con el cajón al lado el tablero se queda en ~350 y las
+   * tarjetas salen en tiras de una letra por línea. Ahí el catálogo va en un modal (se elige y
+   * se cierra) y el tablero conserva la fila entera para colocar.
+   */
+  const cajonAlLado = fila.ancho - anchoLateral - MARGEN >= ANCHO_GRILLA;
+  /** Entrar en edición abre el catálogo solo si no cabe al lado: si cabe, ya está a la vista. */
+  const alternarEdicion = () => {
+    const activando = !editando;
+    setEditando(activando);
+    setCatalogo(activando && !cajonAlLado);
+  };
+  /** El "Listo" del modal vuelve a colocar widgets; en una columna no hay nada que colocar. */
+  const cerrarCatalogo = () => {
+    setCatalogo(false);
+    if (!puedeColocar) setEditando(false);
+  };
   /** Ajustar a la ventana solo donde la grilla es de verdad una grilla. */
   const ajustar = puedeColocar && layout.length > 0;
-  const altoMarco = useAltoLibre(marcoRef, ajustar);
+  const { ref: marcoRef, alto: altoMarco } = useAltoLibre(ajustar);
   const { ref: areaRef, caja: { alto: altoArea } } = useCajaMedida<HTMLDivElement>();
+  // Ancho que se le pasa a la grilla, medido aquí y no con el `useContainerWidth` de la
+  // librería: ese usa un `useRef` y mide en un efecto que sale si el nodo aún no existe, y
+  // mientras cargan los robots este panel devuelve el esqueleto, así que nunca llegaba a medir
+  // y se quedaba en su ancho de reserva (1280 px) para siempre. En un escritorio pasaba
+  // desapercibido; en un Fold desplegado dibujaba un tablero de 1280 px dentro de 583.
+  const { ref: tableroRef, caja: { ancho: anchoTablero } } = useCajaMedida<HTMLDivElement>();
   // Filas a repartir: FILAS como mínimo, o más si la disposición ya las ocupa (más widgets de
   // los que caben en FILAS). Solo mira las cajas guardadas, no el arrastre en curso, así que
   // arrastrar no reescala el tablero a medio gesto. El suelo evita filas ilegibles; si ni así
   // cabe, el tablero crece por debajo de la ventana y el área hace scroll en vez de recortar.
   const filas = Math.max(FILAS, ...layout.map(({ y, h }) => y + h), 0);
   const altoFila =
-    ajustar && altoArea ? Math.max(ALTO_FILA_MIN, (altoArea - (filas - 1) * MARGEN) / filas) : ALTO_FILA;
+    ajustar && altoArea ? Math.max(ALTO_FILA_MIN, (altoArea - (filas - 1) * margen) / filas) : ALTO_FILA;
 
   if (cargando) {
     return (
@@ -540,11 +586,19 @@ export function Panel() {
             cada esquina para editarlo o quitarlo.
           </p>
         )}
+        {/* Sin cajón al lado el catálogo está en un modal, así que hace falta cómo volver a
+            abrirlo sin salir de la edición. */}
+        {edicionActiva && !cajonAlLado && (
+          <button type="button" className="btn btn-sm" onClick={() => setCatalogo(true)}>
+            <Plus className="size-4" />
+            Widgets
+          </button>
+        )}
         <button
           type="button"
           className={`btn btn-sm ${editando ? 'btn-acento' : ''}`}
           aria-pressed={editando}
-          onClick={() => setEditando((v) => !v)}
+          onClick={alternarEdicion}
         >
           {editando ? <Check className="size-4" /> : <LayoutGrid className="size-4" />}
           {editando ? 'Listo' : 'Editar panel'}
@@ -553,10 +607,10 @@ export function Panel() {
 
       <div ref={filaRef} className="flex min-h-0 flex-1 items-stretch gap-4">
         <div ref={areaRef} className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
-          <div ref={containerRef as React.RefObject<HTMLDivElement>} className="h-full">
-            {mounted && layout.length > 0 && (
+          <div ref={tableroRef} className="h-full">
+            {anchoTablero > 0 && layout.length > 0 && (
               <ResponsiveGridLayout
-                width={width}
+                width={anchoTablero}
                 className={edicionActiva ? 'panel-editando' : undefined}
                 layouts={{ grande: layout }}
                 // A mano, no por el ancho ya encogido: con el cajón abierto la grilla puede bajar
@@ -566,7 +620,7 @@ export function Panel() {
                 cols={{ grande: COLUMNAS, chico: 1 }}
                 rowHeight={altoFila}
                 maxRows={ajustar ? filas : undefined}
-                margin={[MARGEN, MARGEN]}
+                margin={[margen, margen]}
                 containerPadding={[0, 0]}
                 dragConfig={{ enabled: edicionActiva }}
                 resizeConfig={{ enabled: edicionActiva, handles: ['se', 'e', 's'] }}
@@ -611,7 +665,7 @@ export function Panel() {
           </div>
         </div>
 
-        {edicionActiva && (
+        {edicionActiva && cajonAlLado && (
           <aside aria-label="Widgets" className="cajon-widgets" style={{ width: anchoLateral }}>
             <h2 className="tarjeta-titulo mb-1 shrink-0">Widgets</h2>
             <div className="-mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
@@ -627,7 +681,7 @@ export function Panel() {
             titulo="Panel vacío"
             descripcion="Has quitado todos los widgets."
             accion={
-              <button type="button" className="btn btn-acento" onClick={() => setEditando(true)}>
+              <button type="button" className="btn btn-acento" onClick={alternarEdicion}>
                 <LayoutGrid className="size-4" />
                 Editar panel
               </button>
@@ -638,13 +692,14 @@ export function Panel() {
 
       {nuevoRobot && <DialogoNuevoRobot onCerrar={() => setNuevoRobot(false)} />}
       {widget && <DialogoWidget id={widget} onCerrar={() => setWidget(null)} />}
-      {/* Pantalla estrecha: no hay dónde colocar, pero sí qué mostrar y qué ocultar. */}
-      {editando && !puedeColocar && (
-        <Modal etiqueta="Widgets" ancho="max-w-sm" onCerrar={() => setEditando(false)}>
+      {/* Catálogo en modal: en una columna (móvil) no hay dónde colocar pero sí qué mostrar y
+          qué ocultar; en un Fold desplegado sí hay dónde, solo que no al lado del tablero. */}
+      {catalogo && (
+        <Modal etiqueta="Widgets" ancho="max-w-sm" onCerrar={cerrarCatalogo}>
           <h2 className="tarjeta-titulo mb-1">Widgets</h2>
           <CajonWidgets onEditar={setWidget} />
-          <button type="button" className="btn btn-acento mt-3 w-full" onClick={() => setEditando(false)}>
-            Listo
+          <button type="button" className="btn btn-acento mt-3 w-full" onClick={cerrarCatalogo}>
+            {puedeColocar ? 'Colocar en el panel' : 'Listo'}
           </button>
         </Modal>
       )}

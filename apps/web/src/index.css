@@ -250,6 +250,14 @@ body {
   .panel-editando .widget-panel > .tarjeta > header {
     @apply pr-20;
   }
+  /* En una tarjeta estrecha (un widget de 6 de las 24 columnas en un Fold desplegado son
+     ~135px) esos 80px no dejan título: se lee en vertical, una letra por línea. Ahí el hueco
+     se hace en vertical, debajo de los botones, que el alto sobra y el ancho no. */
+  @container (max-width: 200px) {
+    .panel-editando .widget-panel > .tarjeta > header {
+      @apply pt-8 pr-0;
+    }
+  }
   /* Cajón del modo edición: columna propia a la derecha del tablero, nunca encima. Tapar las
      tarjetas mientras se colocan impide justamente lo que se está haciendo. */
   .cajon-widgets {

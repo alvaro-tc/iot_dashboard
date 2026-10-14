@@ -347,20 +347,7 @@ por robot, configuración obligatoria por robot) se expresan de forma natural co
 restricciones `CHECK`, índices únicos parciales y *triggers* del propio motor relacional,
 sin depender de una capa externa.
 
-#nota[
-  *Nota sobre la rúbrica.* El documento original de requisitos pedía Supabase (PostgreSQL
-  gestionado + su Auth + su API REST vía PostgREST). La implementación real usa PostgreSQL
-  propio, autenticación propia (bcrypt + JWT) y una API REST propia en Express. La lógica es
-  equivalente punto por punto —tablas relacionales, políticas de acceso por propietario,
-  inserción/lectura por API REST, JWT de sesión— pero sin depender de un proveedor externo,
-  lo cual es preferible en un VPS de bajo consumo donde no conviene añadir una dependencia de
-  red más al camino crítico.
-]
-
 == Estructura de tablas y campos
-
-El esquema completo vive en `apps/api/db/schema.sql` y se aplica desde cero con
-`pnpm db:reset`. Cinco tablas cubren todo el dominio:
 
 #figure(
   table(
@@ -370,12 +357,21 @@ El esquema completo vive en `apps/api/db/schema.sql` y se aplica desde cero con
     fill: tablaFill,
     filaEncabezado([Tabla], [Qué guarda]),
     [`usuarios`], [Cuentas que entran al dashboard: correo, hash bcrypt de la contraseña,
-      nombre, rol (`admin` / `cliente`) y si está activa],
+      nombre, rol (`admin` / `cliente`), si está activa y si tiene el permiso del modo lidar],
+    [`preferencias_usuario`], [1 a 1 con `usuarios`: tema e interfaz del panel (qué widgets,
+      dónde y con qué ajustes) como JSONB opaco, para que la misma cuenta vea lo mismo en
+      cualquier dispositivo],
     [`dispositivos`], [Un robot físico. Su `id` de texto es a la vez el usuario MQTT
-      (`roomba-sala`, …), con hash bcrypt de su token, estado de conexión y versión de
+      (`roomba-sala`, …), con hash y cifrado del token, estado de conexión y versión de
       firmware],
-    [`configuracion_dispositivo`], [Relación 1 a 1 con `dispositivos`: PWM de crucero y
-      ángulos de montaje de los tres sensores. Es lo único que el robot "obedece"],
+    [`configuracion_dispositivo`], [1 a 1 con `dispositivos`: PWM de crucero, ángulos y
+      geometría de los sensores, calibración de movimiento y qué habitación está mapeando
+      ahora. Es lo único que el robot "obedece"],
+    [`salas`], [Una habitación de un robot en modo lidar: su polígono de paredes, el tamaño
+      estimado por el usuario y el real una vez mapeada, y las puertas (huecos que no son
+      salida)],
+    [`mapas`], [1 a 1 con `salas`: la rejilla de ocupación acumulada por el barrido láser,
+      sus obstáculos ya extraídos y cuánta superficie está cubierta],
     [`sesiones`], [Un ciclo de funcionamiento del robot: inicio, fin (`NULL` = activa),
       total de lecturas y batería al inicio/fin],
     [`lecturas`], [Telemetría: una fila por mensaje publicado por el ESP32 — distancia de
@@ -388,53 +384,233 @@ El esquema completo vive en `apps/api/db/schema.sql` y se aplica desde cero con
   titulo: [Diagrama entidad-relación del esquema (`apps/api/db/schema.sql`).],
   canvas(length: 1cm, {
     import draw: *
-    let entidad(pos, w, h, titulo, campos) = {
-      rect((pos.at(0), pos.at(1)), (pos.at(0) + w, pos.at(1) + h), fill: white, stroke: 1pt + tinta, radius: 2pt)
-      rect((pos.at(0), pos.at(1) + h - 0.6), (pos.at(0) + w, pos.at(1) + h), fill: suave, stroke: 1pt + tinta, radius: 2pt)
-      content((pos.at(0) + w / 2, pos.at(1) + h - 0.3), text(size: 8pt, weight: "bold", titulo))
+    let entidad(pos, w, h, titulo, campos, color: suave) = {
+      let (x, y) = pos
+      rect((x, y), (x + w, y + h), fill: white, stroke: 1pt + tinta, radius: 2pt)
+      rect((x, y + h - 0.58), (x + w, y + h), fill: color, stroke: 1pt + tinta, radius: 2pt)
+      content((x + w / 2, y + h - 0.29), text(size: 7.6pt, weight: "bold", titulo))
       for (i, c) in campos.enumerate() {
-        content((pos.at(0) + 0.15, pos.at(1) + h - 1 - i * 0.42), anchor: "west", text(size: 6.3pt, c))
+        content((x + 0.18, y + h - 1 - i * 0.4), anchor: "west", text(size: 6.1pt, c))
       }
     }
-    let rel(a, b, et) = {
-      line(a, b, stroke: 1pt + rgb("#475569"))
-      content(((a.at(0)+b.at(0))/2, (a.at(1)+b.at(1))/2 + 0.2), text(size: 6pt, fill: rgb("#475569"), et))
+    let rel(a, b, et, punteada: false) = {
+      let trazo = if punteada {
+        (paint: rgb("#94A3B8"), thickness: 0.9pt, dash: "dashed")
+      } else {
+        (paint: rgb("#475569"), thickness: 0.9pt)
+      }
+      line(a, b, stroke: trazo)
+      content(
+        ((a.at(0) + b.at(0)) / 2, (a.at(1) + b.at(1)) / 2 + 0.22),
+        text(size: 5.6pt, fill: rgb("#475569"), et),
+      )
+    }
+    // Variante con codo: para una relación que si fuera recta cruzaría por encima de otra
+    // entidad (dispositivos → lecturas, que si no rodea preferencias_usuario y sesiones
+    // pasaría justo por dentro de sus cajas).
+    let relCodo(pts, etq, pos-etq) = {
+      line(..pts, stroke: (paint: rgb("#475569"), thickness: 0.9pt))
+      content(pos-etq, text(size: 5.6pt, fill: rgb("#475569"), etq))
     }
 
-    entidad((0, 6.4), 4.4, 2.6, "usuarios", ("id PK", "correo UK", "contrasena (bcrypt)", "rol"))
-    entidad((6, 6.4), 4.6, 2.6, "dispositivos", ("id PK (= usuario MQTT)", "usuario_id FK", "token_hash", "en_linea"))
-    entidad((12.2, 8.6), 4.6, 2, "configuracion_dispositivo", ("dispositivo_id PK/FK", "velocidad_base", "angulos_sensores"))
-    entidad((12.2, 5), 4.6, 2, "sesiones", ("id PK", "dispositivo_id FK", "finalizada_en (NULL=activa)"))
-    entidad((6, 0.2), 8.2, 2.6, "lecturas", ("id PK", "dispositivo_id FK · sesion_id FK", "distancia_*_cm (NULL=sin eco)", "movimiento_izquierda/derecha (-255..255)"))
+    // Columna izquierda: cuenta y preferencias.
+    entidad((0, 9.3), 4.3, 2.3, "usuarios",
+      ("id PK", "correo UK", "rol", "lidar_habilitado"))
+    entidad((0, 6.5), 4.3, 1.9, "preferencias_usuario", color: rgb("#E2E8F0"),
+      ("usuario_id PK/FK", "datos (tema, panel) JSONB"))
 
-    rel((4.4, 7.7), (6, 7.7), "1 — 0..*")
-    rel((10.6, 9.2), (12.2, 9.2), "1 — 1")
-    rel((10.6, 6.5), (12.2, 6.5), "1 — 0..*")
-    rel((8.2, 6.4), (10.5, 2.8), "1 — 0..*")
-    rel((14, 5), (12, 2.8), "1 — 0..*")
+    // Centro: el robot y lo que hace.
+    entidad((5.1, 8.9), 4.6, 2.7, "dispositivos",
+      ("id PK (= usuario MQTT)", "usuario_id FK", "token_hash", "en_linea · ultimo_contacto"))
+    entidad((5.1, 5.6), 4.6, 2.1, "sesiones",
+      ("id PK", "dispositivo_id FK", "finalizada_en (NULL=activa)"))
+
+    // Derecha: modo lidar (configuración apunta a la sala activa).
+    entidad((10.9, 10.1), 5, 1.9, "configuracion_dispositivo", color: rgb("#FDE8D7"),
+      ("dispositivo_id PK/FK", "velocidad_base · angulos_sensores", "sala_activa_id FK (opcional)"))
+    entidad((10.9, 6.9), 5, 2.3, "salas", color: rgb("#FDE8D7"),
+      ("id PK", "dispositivo_id FK", "forma · vertices", "ancho/alto estimado_cm · real_cm"))
+    entidad((10.9, 3.9), 5, 2.1, "mapas", color: rgb("#FDE8D7"),
+      ("sala_id PK/FK", "rejilla (base64) · cols · filas", "obstaculos · cobertura"))
+
+    // Abajo: telemetría cruda, la que más filas acumula.
+    entidad((0, 0), 10.5, 2.5, "lecturas",
+      ("id PK", "dispositivo_id FK · sesion_id FK", "distancia_izquierda/central/derecha_cm (NULL=sin eco)", "movimiento_izquierda/derecha (-255..255)"))
+
+    rel((4.3, 7.45), (5.1, 7.45), "1 — 1")
+    rel((2.15, 9.3), (2.15, 8.4), "1 — 1")
+    rel((9.7, 9.9), (10.9, 10.9), "1 — 1")
+    rel((9.7, 8.9), (10.9, 8.0), "1 — 0..*")
+    rel((13.4, 10.1), (13.4, 9.2), "0..1 — 1", punteada: true)
+    rel((13.4, 6.9), (13.4, 6.0), "1 — 0..1")
+    rel((7.4, 8.9), (7.4, 7.7), "1 — 0..*")
+    // Codo para no atravesar preferencias_usuario ni sesiones de camino a lecturas.
+    relCodo(((5.1, 8.9), (4.9, 6.3), (3, 2.5)), "1 — 0..*", (4.5, 6.9))
+    rel((7.4, 5.6), (7.4, 2.5), "1 — 0..*")
   }),
 )
 
+=== `usuarios`
+
+Guarda la identidad de quien entra al dashboard: correo, hash bcrypt de la contraseña,
+nombre, rol (`admin` ve todos los robots, `cliente` solo los suyos), si la cuenta está
+activa y si tiene el permiso extra del modo lidar. Fila de ejemplo:
+
+```
+{id: 7, correo: "ana@demo.com", contrasena: "$2b$10$…", rol: "cliente",
+ activo: true, lidar_habilitado: true}
+```
+
+=== `preferencias_usuario`
+
+Relación 1 a 1 con `usuarios`. Es la única tabla pensada para que la lea y escriba el
+navegador casi sin validar: tema e interfaz del panel (qué widgets, dónde y con qué
+ajustes) como JSONB opaco, para que la misma cuenta vea lo mismo en cualquier
+dispositivo. Fila de ejemplo:
+
+```
+{usuario_id: 7, datos: {"tema": "oscuro", "panel": {"visibles": ["radar", "bateria"]}}}
+```
+
+=== `dispositivos`
+
+El robot físico en sí. Su `id` de texto es a la vez el usuario MQTT (`roomba-sala`, …),
+con hash y cifrado del token, estado de conexión y versión de firmware. Fila de ejemplo:
+
+```
+{id: "roomba-sala", usuario_id: 7, nombre: "Roomba Sala",
+ token_hash: "$2b$10$…", en_linea: true}
+```
+
+=== `configuracion_dispositivo`
+
+Relación 1 a 1 con `dispositivos` y la única tabla que el firmware *obedece*: todo lo
+demás es lo que el robot *reporta*. Guarda el PWM de crucero, ángulos y geometría de los
+sensores, calibración de movimiento y qué habitación está mapeando ahora
+(`sala_activa_id`, único enlace del robot hacia el modo lidar). Fila de ejemplo:
+
+```
+{dispositivo_id: "roomba-sala", velocidad_base: 180,
+ angulos_sensores: {"izquierdo": -45, "central": 0, "derecho": 45}, sala_activa_id: 3}
+```
+
+=== `salas`
+
+Una habitación de un robot en modo lidar: su polígono de paredes, el tamaño estimado por
+el usuario y el real una vez mapeada, y las puertas (huecos que no son salida). Fila de
+ejemplo:
+
+```
+{id: 3, dispositivo_id: "roomba-sala", nombre: "Sala", forma: "rectangulo",
+ ancho_estimado_cm: 400, alto_estimado_cm: 350}
+```
+
+=== `mapas`
+
+Relación 1 a 1 con `salas`: la rejilla de ocupación acumulada por el barrido láser, sus
+obstáculos ya extraídos y cuánta superficie está cubierta. Se guarda aparte de `salas`
+porque pesa mucho más que el resto de la fila. Fila de ejemplo:
+
+```
+{sala_id: 3, cols: 80, filas: 70, resolucion_cm: 5, barridos: 214, cobertura: 0.86}
+```
+
+=== `sesiones`
+
+Un ciclo de funcionamiento del robot: inicio, fin (`NULL` = activa), total de lecturas y
+batería al inicio/fin. Agrupa la telemetría de un mismo ciclo de limpieza, para poder
+preguntar "¿cómo le fue a esta sesión?" sin agregar manualmente miles de `lecturas`. Fila
+de ejemplo:
+
+```
+{id: 152, dispositivo_id: "roomba-sala", iniciada_en: "2026-10-10T08:00Z",
+ finalizada_en: null, bateria_inicio_porcentaje: 96}
+```
+
+=== `lecturas`
+
+Telemetría cruda: una fila por mensaje publicado por el ESP32 — distancia de cada
+sensor, PWM con signo de cada rueda, voltaje y porcentaje de batería. Es la tabla que más
+crece, la materia prima de todas las gráficas del panel. Fila de ejemplo:
+
+```
+{id: 48213, dispositivo_id: "roomba-sala", sesion_id: 152, distancia_central_cm: 18.0,
+ movimiento_izquierda: 180, movimiento_derecha: 180, bateria_porcentaje: 94}
+```
+
 == Restricciones y tipos de datos
 
-Las reglas de integridad viven en la propia base, no solo en el código de la API:
+Las reglas de integridad viven en la propia base, no solo en el código de la API. Se agrupan
+en cuatro familias:
 
-- `rol CHECK (rol IN ('admin','cliente'))` en `usuarios`.
-- `movimiento_izquierda`/`movimiento_derecha SMALLINT CHECK (… BETWEEN -255 AND 255)` en
-  `lecturas`: el PWM con signo nunca puede salirse de la escala real del driver.
-- `distancia_*_cm NUMERIC(5,1) CHECK (… BETWEEN 0 AND 400)`: rango físico del HC-SR04;
-  `NULL` significa explícitamente "el eco no volvió", no "falta el dato".
-- `bateria_porcentaje SMALLINT CHECK (… BETWEEN 0 AND 100)`.
-- Índice único parcial `uniq_sesion_activa_por_dispositivo ON sesiones (dispositivo_id)
-  WHERE finalizada_en IS NULL`: impone a nivel de base que *un robot no puede tener dos
-  sesiones abiertas a la vez*.
-- `ON DELETE CASCADE` en toda la jerarquía usuarios → dispositivos → configuración / sesiones
-  → lecturas: borrar una cuenta no deja filas huérfanas.
-- *Trigger* `trg_configuracion_por_defecto`: al insertar un `dispositivo`, crea automáticamente
-  su fila de `configuracion_dispositivo`, así el resto del código puede asumir que siempre
-  existe.
-- Tres *vistas* (`v_lecturas_por_minuto`, `v_lecturas_por_hora`, `v_resumen_sesion`) agregan la
-  telemetría en el propio motor de base de datos para no mandar miles de filas crudas al
+=== Validación de rangos (`CHECK`)
+
+Impiden que se guarde un valor fuera de lo físicamente posible, directamente en la base.
+
+#figure(
+  table(
+    columns: (auto, 1fr),
+    stroke: tablaStroke,
+    inset: 6pt,
+    fill: tablaFill,
+    filaEncabezado([Regla], [Qué garantiza]),
+    [`rol IN ('admin','cliente')` en `usuarios`\
+     `forma IN ('rectangulo','poligono')` en `salas`],
+    [Solo esos valores son válidos para el campo; cualquier otro lo rechaza la base, no la API.],
+
+    [`movimiento_izquierda`/`movimiento_derecha` \ `BETWEEN -255 AND 255` en `lecturas`],
+    [El PWM con signo nunca puede salirse de la escala real del driver de motores.],
+
+    [`distancia_*_cm BETWEEN 0 AND 400` en `lecturas`],
+    [Rango físico del sensor HC-SR04. `NULL` significa explícitamente "el eco no volvió",
+     no "falta el dato".],
+
+    [`bateria_porcentaje BETWEEN 0 AND 100`],
+    [Un porcentaje de batería fuera de ese rango no tiene sentido.],
+
+    [`ancho_estimado_cm`/`alto_estimado_cm` \ `BETWEEN 50 AND 2000` en `salas`],
+    [Una habitación fuera de ese rango es casi con certeza un error de tecleo, no una sala
+     real.],
+  ),
+  caption: [Restricciones `CHECK` por tabla.],
+)
+
+=== Índices únicos
+
+Evitan duplicados o estados inconsistentes que ninguna validación de la API podría impedir
+con la misma seguridad.
+
+#figure(
+  table(
+    columns: (auto, 1fr),
+    stroke: tablaStroke,
+    inset: 6pt,
+    fill: tablaFill,
+    filaEncabezado([Índice], [Qué garantiza]),
+    [`uniq_sesion_activa_por_dispositivo` \ (parcial, `WHERE finalizada_en IS NULL`)],
+    [Un mismo robot no puede tener dos sesiones abiertas a la vez.],
+
+    [`uniq_sala_nombre_por_dispositivo` \ (`dispositivo_id, lower(nombre)`)],
+    [Dos habitaciones del mismo robot no pueden llamarse igual, sin distinguir mayúsculas.],
+  ),
+  caption: [Índices únicos y qué duplicado evitan.],
+)
+
+=== Borrado en cascada (`ON DELETE`)
+
+`ON DELETE CASCADE` recorre toda la jerarquía usuarios → dispositivos → configuración /
+salas / sesiones → mapas / lecturas: borrar una cuenta no deja filas huérfanas en ninguna
+tabla dependiente. La única excepción es `configuracion_dispositivo.sala_activa_id`, con
+`ON DELETE SET NULL`: borrar la sala que el robot tenía activa no debe borrar ni bloquear
+el robot, solo dejarlo sin habitación asignada.
+
+=== Automatismos del motor (*triggers* y vistas)
+
+- *Trigger* `trg_configuracion_por_defecto`: al insertar un `dispositivo`, crea
+  automáticamente su fila de `configuracion_dispositivo`, así el resto del código puede
+  asumir que siempre existe.
+- Tres *vistas* (`v_lecturas_por_minuto`, `v_lecturas_por_hora`, `v_resumen_sesion`) agregan
+  la telemetría en el propio motor de base de datos, para no mandar miles de filas crudas al
   navegador en cada gráfica.
 
 == Seguridad (control de acceso a los datos)
