@@ -113,13 +113,23 @@ function useCajaMedida<T extends HTMLElement>() {
   const ref = useCallback((nodo: T | null) => setEl(nodo), []);
   useLayoutEffect(() => {
     if (!el) return;
-    const r = el.getBoundingClientRect();
-    setCaja({ ancho: r.width, alto: r.height });
+    const medir = () => {
+      const r = el.getBoundingClientRect();
+      setCaja({ ancho: r.width, alto: r.height });
+    };
+    medir();
     const ro = new ResizeObserver(([e]) =>
       setCaja({ ancho: e.contentRect.width, alto: e.contentRect.height }),
     );
     ro.observe(el);
-    return () => ro.disconnect();
+    // Al plegar/desplegar un Fold, algunos Chrome de Android no disparan el ResizeObserver con
+    // el nuevo ancho (el gesto no siempre cuenta como resize del elemento): el resize de la
+    // ventana sí llega, y de ahí se vuelve a medir el elemento a mano.
+    window.addEventListener('resize', medir);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', medir);
+    };
   }, [el]);
   return { ref, caja };
 }

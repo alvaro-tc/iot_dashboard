@@ -51,6 +51,16 @@
   caption: titulo,
 )
 
+// Estilo de tabla compartido por todo el informe: encabezado oscuro, sin sombreado
+// en las filas de datos, solo una línea fina entre filas.
+#let filaEncabezado(..celdas) = table.header(
+  ..celdas.pos().map(c => text(fill: white, weight: "bold", c))
+)
+#let tablaFill(x, y) = if y == 0 { tinta } else { white }
+#let tablaStroke(x, y) = (
+  bottom: if y == 0 { 1.5pt + acento } else { 0.5pt + rgb("#E2E8F0") },
+)
+
 // ---------------------------------------------------------------------------
 // Portada
 // ---------------------------------------------------------------------------
@@ -110,101 +120,90 @@
 
 == Descripción general del proyecto
 
-El proyecto implementa un *robot aspirador doméstico de tipo Roomba* cuyo nodo físico es
-un *ESP32 programado en MicroPython*. En la etapa actual el foco está puesto en el
-*movimiento y la evasión de obstáculos*, no en la succión: el robot detecta paredes y
-muebles con tres sensores ultrasónicos, decide por sí mismo cómo esquivarlos y reporta su
-telemetría a un dashboard web en tiempo real.
-
-El sistema completo —firmware, backend y frontend— vive en un único monorepo gestionado con
-`pnpm`, con cuatro paquetes principales:
-
-#figure(
-  table(
-    columns: (auto, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
-    inset: 7pt,
-    [*Paquete*], [*Responsabilidad*],
-    [`apps/api`], [API en Express + Socket.IO + puente MQTT + persistencia por lotes en PostgreSQL],
-    [`apps/web`], [Dashboard en React + Vite + Tailwind + Chart.js],
-    [`packages/shared`], [Contratos MQTT, geometría del robot y motor de simulación físico],
-    [`firmware`], [MicroPython para el ESP32: sensores, motores, MQTT, ESP-NOW],
-    [`simulador`], [Robot simulado que publica por MQTT igual que el ESP32 real, para probar sin hardware],
-    [`infra`], [Configuración del VPS: Mosquitto, Caddy (TLS), pm2],
-  ),
-  caption: [Estructura del monorepo.],
-)
+El proyecto se trata de realizar una aspiradora automática con componentes asequibles, que no
+implique mucha inversión inicial. La solución terminó siendo un *robot aspirador doméstico de
+tipo Roomba*, con un *ESP32 programado en MicroPython* como cerebro físico. Por ahora el
+esfuerzo está puesto en resolver bien lo esencial —*moverse y evitar obstáculos*— y no todavía
+en la succión: el robot detecta paredes y muebles con tres sensores ultrasónicos, decide por sí
+mismo cómo esquivarlos, y manda esa telemetría en vivo a un dashboard web para que se pueda
+ver, desde el navegador, qué está haciendo en cada momento.
 
 == Planteamiento del problema
 
-Un robot aspirador doméstico necesita evitar colisiones con paredes y muebles sin
-intervención humana continua, y su propietario necesita poder *ver qué está haciendo el
-robot mientras limpia*: qué tan cerca están los obstáculos, cuánta batería le queda y si
-sigue conectado. Sin esa visibilidad, el único indicio de un problema (el robot atascado, sin
-batería o fuera de línea) es notarlo físicamente horas después.
+Los robots aspiradores comerciales con buena detección de obstáculos (sensores infrarrojos,
+LIDAR, cámaras) tienen un costo que los vuelve poco accesibles para construir o reparar de
+forma casera. El reto que plantea este proyecto es justamente el contrario: lograr una
+aspiradora automática con *detección de obstáculos confiable usando componentes lo más
+asequibles posible* —sensores ultrasónicos HC-SR04 en lugar de LIDAR comercial, un ESP32 en
+lugar de controladores propietarios— sin que esa reducción de costo signifique un robot que
+choque contra todo.
 
-El problema técnico se divide en tres partes:
-
-1. *A bordo*: leer tres sensores ultrasónicos y la batería con suficiente frecuencia para
-  reaccionar antes de chocar, y mover dos motorreductores con un driver de puente H.
-2. *En tránsito*: llevar esa telemetría del robot a un navegador con la menor latencia
-  posible, sin que una base de datos lenta o caída bloquee el camino en vivo.
-3. *En reposo*: guardar un historial consultable (sesiones de limpieza, lecturas, consumo de
-  batería) sin inventar datos que el hardware no puede medir — en particular, la posición del
-  robot, que sin encoders ni GPS no se puede calcular de forma fiable.
+Con esa base de bajo costo funcionando, el problema se proyecta hacia una segunda etapa: la
+posibilidad de incorporar más adelante un *LIDAR casero*, construido con los mismos
+componentes económicos, que permita generar un mapeo del entorno más preciso que el que dan
+tres sensores ultrasónicos fijos, sin saltar directamente a un LIDAR comercial costoso.
 
 == Objetivos
 
-*Objetivo general*: construir un sistema IoT extremo a extremo —firmware, protocolo de
-transporte, persistencia, API REST y dashboard— que reporte en tiempo real la telemetría de
-un robot aspirador y permita consultar su historial de limpiezas.
+=== Objetivo general
 
-*Objetivos específicos*:
+Prototipar una aspiradora automática con componentes asequibles, sin comprometer la
+detección de obstáculos.
 
-- Leer de forma no bloqueante tres sensores de distancia HC-SR04, el voltaje de batería por
-  ADC y reportar el estado de dos motores con PWM con signo.
-- Transportar la telemetría del ESP32 al backend por MQTT sobre una conexión persistente, con
-  detección de desconexión mediante *Last Will* y configuración retenida.
-- Emitir cada lectura por WebSocket *antes* de escribirla en PostgreSQL, para que la base de
-  datos nunca sea un cuello de botella del camino en vivo.
-- Diseñar un esquema relacional que solo almacene lo que el hardware mide realmente, con las
-  reglas de integridad (`CHECK`, índices únicos, triggers) resueltas en la propia base.
-- Exponer esa información mediante una API REST autenticada, con lectura cruda, agregada
-  (por minuto/hora) y exportable a CSV.
-- Construir un dashboard en React que visualice la telemetría en vivo con gráficas reales
-  (Chart.js) y permita revisar el historial de sesiones.
-- Implementar registro e inicio de sesión propios (bcrypt + JWT), sin depender de un
-  proveedor externo de autenticación.
+=== Objetivos específicos
+
+- Diseñar el esquema de conexiones de los componentes electrónicos en Fritzing, documentando
+  el cableado real del robot con las piezas disponibles.
+- Diseñar el esquema de base de datos (tablas, relaciones y reglas de integridad) que respalde
+  la telemetría del robot y el historial de sus sesiones de limpieza.
+- Implementar WebSockets para que la telemetría del robot se vea en el dashboard en tiempo
+  real, sin depender de refrescar la página.
+- Generar un dashboard con gráficas interactivas que permita visualizar correctamente los
+  datos de telemetría a medida que llegan.
+- Generar registros de las sesiones en las que el robot recorrió la habitación, para poder
+  consultarlas después.
+- Implementar inicio de sesión y autenticación de usuarios.
+- Permitir que cada usuario registre y vincule su propio robot a su cuenta.
+- Generar una versión beta de reconocimiento de la habitación mediante modelos de machine
+  learning.
 
 == Alcance
 
-Queda dentro del alcance: el nodo ESP32 con sus tres sensores y dos motores, el transporte
-MQTT y su alternativa por API REST, la base de datos PostgreSQL con su API de lectura, el
-sistema de autenticación propio y el dashboard en tiempo real con su historial.
+En esta etapa se realiza un *prototipado real del robot*, no solo una simulación: el nodo
+ESP32 con sus sensores ultrasónicos y sus dos motores, construido y funcionando de forma
+física, publicando su telemetría por MQTT, junto con la base de datos PostgreSQL, el sistema
+de autenticación propio y el dashboard en tiempo real con su historial. A esto se suma una
+*beta de un sistema LIDAR casero*, como primer paso hacia un mapeo del entorno más fino que el
+que ofrecen los sensores ultrasónicos fijos.
+
+También se logra la *visualización de datos en tiempo real* desde el dashboard, la
+*implementación de usuarios con dos roles* —administrador y usuario— y una página *desplegada
+en un VPS*, accesible desde cualquier dispositivo con conexión a internet.
 
 Queda *fuera* del alcance de esta etapa —y así se deja documentado en el propio código, sin
-simular hardware que no existe—: la succión y los cepillos, la estimación de posición por
-odometría (el robot no tiene encoders), los sensores adicionales (giroscopio, bumper, caída) y
-cualquier estrategia de cobertura de limpieza. El `README.md` del repositorio dedica una
-sección completa, *Pendiente de definir*, a enumerar estos puntos explícitamente.
+simular hardware que no existe—: el sistema de succión y los cepillos, sensores adicionales
+como el de polvo, la estimación de posición por odometría (el robot no tiene encoders), otros
+sensores adicionales (giroscopio, bumper, caída) y cualquier estrategia de cobertura de
+limpieza.
 
 // ===========================================================================
 = Diseño del Sistema IoT
 
 == Arquitectura general
 
-El sistema sigue una arquitectura de *tres capas* con una regla de diseño explícita: *el
-camino en vivo nunca espera a la base de datos*. Cada lectura del robot se retransmite por
-WebSocket al instante y solo después se encola para guardarse en PostgreSQL en lotes de un
-segundo.
+El sistema sigue una arquitectura de *tres capas*: nodo IoT, backend y dashboard. Cada
+lectura del robot se retransmite por WebSocket al instante y solo después se encola para
+guardarse en PostgreSQL en lotes de un segundo.
 
 #figura(
   titulo: [Arquitectura general del sistema: nodo IoT, transporte, backend y dashboard.],
   canvas(length: 0.7cm, {
     import draw: *
 
-    let caja(pos, w, h, etiqueta, color: white) = {
-      rect((pos.at(0), pos.at(1)), (pos.at(0) + w, pos.at(1) + h), fill: color, stroke: 1pt + tinta, radius: 2pt)
+    let gris = rgb("#94A3B8")
+    let caja(pos, w, h, etiqueta, color: white, dashed: false) = {
+      let borde = if dashed { (paint: gris, thickness: 1pt, dash: "dashed") } else { 1pt + tinta }
+      rect((pos.at(0), pos.at(1)), (pos.at(0) + w, pos.at(1) + h), fill: color, stroke: borde, radius: 2pt)
       content(
         (pos.at(0) + w / 2, pos.at(1) + h / 2),
         box(width: (w - 0.4) * 1cm, text(size: 7.3pt, align(center, etiqueta))),
@@ -213,80 +212,85 @@ segundo.
 
     // Nodo físico
     caja((0, 3.6), 4.2, 2, [*ESP32* \ MicroPython \ 3×US · ADC · PWM], color: suave)
-    caja((0, 0.4), 4.2, 1.4, [*Mando ESP-NOW* \ órdenes manuales], color: white)
-    line((2.1, 1.8), (2.1, 3.6), mark: (end: "stealth"), stroke: 1pt + tinta)
+    caja(
+      (0, 0.4), 4.2, 1.4,
+      [*Mando ESP-NOW* \ órdenes manuales \ #text(size: 6pt, style: "italic", fill: rgb("#64748B"))[solo pruebas iniciales]],
+      color: rgb("#E7EBEF"), dashed: true,
+    )
+    line((2.1, 1.8), (2.1, 3.6), mark: (end: "stealth"), stroke: (paint: gris, thickness: 1pt, dash: "dashed"))
 
     // Broker
     caja((6.4, 3.6), 3.8, 2, [*Mosquitto* \ TLS : 8883 (VPS) \ ACL por robot], color: white)
-    line((4.2, 4.9), (6.4, 4.9), mark: (end: "stealth"), stroke: 1pt + acento)
-    content((5.3, 5.25), text(size: 6pt, fill: acento)[telemetría / estado])
-    line((6.4, 4.3), (4.2, 4.3), mark: (end: "stealth"), stroke: 1pt + rgb("#475569"))
-    content((5.3, 3.95), text(size: 6pt, fill: rgb("#475569"))[config retenida])
+    line((4.2, 5.3), (6.4, 5.3), mark: (end: "stealth"), stroke: 1pt + acento)
+    content((5.3, 5.65), text(size: 6pt, fill: acento)[telemetría / estado])
+    line((6.4, 3.9), (4.2, 3.9), mark: (end: "stealth"), stroke: 1pt + rgb("#475569"))
+    content((5.3, 3.55), text(size: 6pt, fill: rgb("#475569"))[config retenida])
 
     // API
     caja((12.6, 3.6), 4.2, 2, [*API Express* \ puente MQTT \ Socket.IO · REST], color: suave)
-    line((10.2, 4.9), (12.6, 4.9), mark: (end: "stealth"), stroke: 1pt + acento)
-    content((11.4, 5.25), text(size: 6pt, fill: acento)[MQTT])
+    line((10.2, 5.3), (12.6, 5.3), mark: (end: "stealth"), stroke: 1pt + acento)
+    content((11.4, 5.65), text(size: 6pt, fill: acento)[MQTT])
 
     // Postgres
-    caja((12.6, 0.4), 4.2, 1.6, [*PostgreSQL* \ lotes cada 1 s], color: white)
+    caja((12.6, 0.4), 4.2, 1.6, [*PostgreSQL* \ persistencia por lotes], color: white)
     line((14.7, 3.6), (14.7, 2), mark: (end: "stealth"), stroke: 1pt + rgb("#475569"))
-    content((16.2, 2.8), text(size: 6pt, fill: rgb("#475569"))[lotes de 1 s])
 
     // Dashboard
     caja((19.2, 3.6), 4, 2, [*Dashboard React* \ Socket.IO · Chart.js], color: suave)
-    line((16.8, 4.9), (19.2, 4.9), mark: (end: "stealth"), stroke: 1pt + acento)
-    content((18, 5.25), text(size: 6pt, fill: acento)[WebSocket])
-    line((19.2, 4), (16.8, 4), mark: (end: "stealth"), stroke: 1pt + rgb("#475569"))
-    content((18, 3.65), text(size: 6pt, fill: rgb("#475569"))[REST: historial / login])
+    line((16.8, 5.3), (19.2, 5.3), mark: (end: "stealth"), stroke: 1pt + acento)
+    content((18, 5.65), text(size: 6pt, fill: acento)[WebSocket])
+    line((19.2, 3.9), (16.8, 3.9), mark: (end: "stealth"), stroke: 1pt + rgb("#475569"))
+    content((18, 3.55), text(size: 6pt, fill: rgb("#475569"))[REST: historial / login])
   }),
 )
 
 El flujo tiene cuatro tramos:
 
-1. *ESP32 → Mosquitto*: telemetría por MQTT sobre TLS (puerto 8883 en producción, 1883 en
-  desarrollo local), con conexión persistente y *Last Will* para anunciar desconexión.
-2. *Mosquitto → API*: la API se suscribe como usuario de servicio a `roomba/#`, valida cada
-  mensaje con Zod y lo encola por robot (una cola por `dispositivoId`, para no invertir el
-  orden de dos lecturas consecutivas del mismo robot).
+1. *ESP32 → Mosquitto*: telemetría por MQTT (puerto 8883), con conexión persistente
+  y *Last Will* para anunciar desconexión.
+2. *Mosquitto → API*: la API está suscrita a Mosquitto y recibe ahí cada mensaje que publica
+  el robot; lo valida y lo guarda en orden, uno por uno, para que no se mezclen las lecturas
+  de dos robots distintos.
 3. *API → Dashboard*: cada lectura válida se emite de inmediato por Socket.IO a la sala del
   robot (`robot:{id}`) y *solo después* entra en el buffer que se vacía a PostgreSQL una
   vez por segundo.
 4. *API → PostgreSQL*: persistencia por lotes, pensada para no hacer un `INSERT` por mensaje
   cuando el robot publica varias veces por segundo.
 
-Como alternativa a MQTT, la API expone `POST /api/ingesta`: un firmware que no pueda abrir una
-conexión MQTT puede enviar lotes de lecturas por HTTP, autenticado con el mismo token del
-robot. Pierde la configuración retenida y la detección de caída por *Last Will*, pero prueba
-que la inserción también funciona por API REST pura.
-
 == Protocolos utilizados
 
-#figure(
-  table(
-    columns: (auto, auto, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
-    inset: 7pt,
-    [*Protocolo*], [*Tramo*], [*Para qué*],
-    [MQTT (TCP 1883 / TLS 8883)], [ESP32 ↔ Mosquitto ↔ API],
-      [Telemetría, estado de conexión y configuración retenida, con *QoS 1* en estado/config
-       y *Last Will* para desconexión],
-    [ESP-NOW], [Mando ↔ ESP32], [Órdenes manuales de baja latencia sin pasar por Wi-Fi ni
-      por el backend; sigue funcionando si la red cae],
-    [WebSocket (Socket.IO, `wss`)], [API ↔ Dashboard], [Telemetría, estado y configuración
-      en tiempo real, autenticado con el JWT en el *handshake*],
-    [HTTP/REST (JSON)], [Dashboard / robot ↔ API], [Login, historial, exportación CSV,
-      administración y la vía alternativa de ingesta `POST /api/ingesta`],
-  ),
-  caption: [Protocolos de transporte usados en cada tramo del sistema.],
-)
+#{
+  let plomo = rgb("#94A3B8")
+  figure(
+    table(
+      columns: (auto, auto, 1fr),
+      stroke: tablaStroke,
+      inset: 8pt,
+      fill: tablaFill,
+      filaEncabezado([Protocolo], [Tramo], [Para qué]),
+      [*MQTT* \ (puerto 8883)], [ESP32 ↔ Mosquitto ↔ API],
+        [Lleva la telemetría y el estado de conexión. Si el robot se cae, el broker avisa solo,
+        sin esperar a que nadie pregunte],
+      [*WebSocket* \ (Socket.IO)], [API ↔ Dashboard],
+        [Envía los datos en vivo al dashboard apenas llegan, ya autenticado desde que se abre
+        la conexión],
+      [*HTTP/REST* \ (JSON)], [Dashboard ↔ API],
+        [Lo que no es tiempo real: iniciar sesión, ver el historial y descargar el CSV],
+      text(weight: "bold", fill: plomo)[ESP-NOW \ #text(size: 6pt, style: "italic")[(solo pruebas)]],
+        text(fill: plomo)[Mando ↔ ESP32],
+        text(fill: plomo)[Órdenes manuales de reacción rápida, sin pasar por el Wi-Fi ni por el
+        backend; un prototipo inicial, no parte del flujo final],
+    ),
+    caption: [Protocolos de transporte usados en cada tramo del sistema.],
+  )
+}
 
-La justificación de usar MQTT en vez de solo REST para la telemetría, documentada en el
-`README.md` del proyecto, se apoya en cuatro motivos: *latencia* (una conexión persistente
-evita abrir TCP+TLS en cada envío a 2 Hz), *configuración sin sondeo* (el robot se suscribe a
-`config` y recibe el cambio sin tener que preguntar), *detección de caída gratuita* (el *Last
-Will* publica `en_linea: false` sin esperar un timeout) y *configuración retenida* (un robot
-que arranca, o un dashboard que se abre, ven el estado vigente sin pedirlo).
+La razón de usar MQTT en vez de solo REST para la telemetría se apoya en cuatro motivos:
+*latencia* (una conexión persistente evita abrir una conexión nueva en cada envío a 2 Hz),
+*configuración sin sondeo* (el robot se suscribe a `config` y recibe el cambio sin tener que
+preguntar), *detección de caída gratuita* (el *Last Will* publica `en_linea: false` sin
+esperar un timeout) y *configuración retenida* (un robot que arranca, o un dashboard que se
+abre, ven el estado vigente sin pedirlo).
 
 == Descripción de componentes y sensores
 
@@ -295,85 +299,40 @@ El nodo físico es un *ESP32* con los siguientes componentes (pines reales de
 
 #figure(
   table(
-    columns: (auto, auto, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
+    columns: (auto, 1fr),
+    stroke: tablaStroke,
     inset: 7pt,
-    [*Componente*], [*Pines (ESP32)*], [*Función*],
-    [3× HC-SR04 (ultrasónico)], [Izq. `TRIG 19 / ECHO 21`\ Centro `TRIG 5 / ECHO 18`\
-      Der. `TRIG 22 / ECHO 23`], [Distancia a obstáculos de 2 a 400 cm (rango útil mostrado
-      en el dashboard: 0–100 cm). Montados a −45°, 0° y +45° respecto al frente del robot],
-    [Driver TB6612FNG (puente H)], [`PWMA 25, AIN1 26, AIN2 27`\ `PWMB 13, BIN1 14, BIN2 32`\
-      `STBY 4`], [Control de dos motorreductores por PWM a 20 kHz, con sentido
-      independiente por rueda (tracción diferencial)],
-    [Divisor resistivo + ADC], [`PIN 34`, atenuación 11 dB], [Lectura del voltaje de batería;
-      el factor del divisor y los límites de voltaje (6.0–8.4 V) se calibran en `configuracion.py`],
-    [LED de estado], [reservado en el firmware], [Indicador visual del estado del robot],
-    [ESP-NOW (radio interna del ESP32)], [sin pines externos], [Recepción de órdenes del
-      mando; filtrable por MAC para aceptar solo un mando autorizado],
+    fill: tablaFill,
+    filaEncabezado([Componente], [Función]),
+    [*ESP32*], [Microcontrolador principal: corre MicroPython y coordina sensores, motores y
+      comunicación],
+    [*3× HC-SR04* (ultrasónico)], [Distancia a obstáculos en los tres frentes del robot
+      (izquierda, centro, derecha)],
+    [*TB6612FNG* (puente H)], [Controla dirección y velocidad de los dos motorreductores por
+      PWM, con sentido independiente por rueda],
+    [*Divisor resistivo*], [Adapta los 5 V de las líneas ECHO y de la batería a los 3.3 V que
+      tolera el ESP32],
+    [*2× pilas 18650*], [Fuente de energía del robot (6.0–8.4 V)],
+    [*Portapilas*], [Alojamiento y conexión de las dos pilas 18650],
+    [*LM2596*], [Regulador que reduce el voltaje de la batería al riel de 5 V que usan el
+      ESP32, el driver y los sensores],
+    [*2× motorreductores con ruedas*], [Tracción diferencial del robot],
   ),
-  caption: [Componentes y sensores del nodo IoT (mínimo exigido: tres sensores; implementados: tres HC-SR04 + batería).],
+  caption: [Componentes y sensores del nodo IoT.],
 )
-
-#figura(
-  titulo: [Diagrama de conexión: ESP32, driver de motores, sensores ultrasónicos y batería.],
-  canvas(length: 1cm, {
-    import draw: *
-    let caja(pos, w, h, etiqueta, color: white, tam: 7.5pt) = {
-      rect((pos.at(0), pos.at(1)), (pos.at(0) + w, pos.at(1) + h), fill: color, stroke: 1pt + tinta, radius: 2pt)
-      content((pos.at(0) + w / 2, pos.at(1) + h / 2), text(size: tam, etiqueta))
-    }
-    let pin(desde, hasta, etiqueta) = {
-      line(desde, hasta, stroke: 0.8pt + rgb("#475569"))
-      content(((desde.at(0) + hasta.at(0)) / 2, (desde.at(1) + hasta.at(1)) / 2 + 0.22),
-        text(size: 6pt, fill: rgb("#475569"), etiqueta))
-    }
-
-    caja((6, 2.2), 4, 3, [*ESP32*], color: suave, tam: 10pt)
-
-    caja((0, 5.6), 2.6, 1.1, [HC-SR04\ izquierdo (−45°)])
-    caja((7, 6.6), 2.6, 1.1, [HC-SR04\ central (0°)])
-    caja((13.5, 5.6), 2.6, 1.1, [HC-SR04\ derecho (+45°)])
-    pin((1.3, 5.6), (6.8, 4.6), "TRIG 19 / ECHO 21")
-    pin((8.3, 6.6), (8.3, 5.2), "TRIG 5 / ECHO 18")
-    pin((14.8, 5.6), (10.2, 4.6), "TRIG 22 / ECHO 23")
-
-    caja((0.3, 0.2), 4.2, 1.6, [TB6612FNG\ rueda izquierda], color: white)
-    caja((13.6, 0.2), 4.2, 1.6, [TB6612FNG\ rueda derecha], color: white)
-    pin((4.5, 1.2), (6, 2.6), "PWMA 25 / AIN1 26 / AIN2 27")
-    pin((13.6, 1.2), (10, 2.6), "PWMB 13 / BIN1 14 / BIN2 32")
-
-    caja((5.2, 0.4), 1.6, 0.9, [STBY])
-    pin((6, 1.3), (7, 2.2), "GPIO 4")
-
-    caja((8, -2.1), 3, 1.1, [Divisor resistivo\ + batería])
-    pin((9.5, -1), (9.5, 2.2), "ADC 34 (atn. 11dB)")
-
-    caja((2.8, 2.6), 1.8, 0.9, [LED estado])
-  }),
-)
-
-El esquema anterior es la vista lógica de pines. El montaje real del nodo, tal como está
-cableado hoy y como lo refleja `firmware/configuracion.py`, es el siguiente:
 
 #figure(
-  image("assets/image.png", width: 100%),
-  caption: [Diagrama actual de conexiones del firmware: ESP32 alimentado desde dos celdas
-    18650 a través de un regulador LM2596 (5 V), driver TB6612FNG hacia los dos motores TT, y
-    los tres HC-SR04 con divisor resistivo en cada línea ECHO para adaptar los 5 V del sensor
-    a los 3.3 V que tolera el ESP32.],
+  block(
+    stroke: (paint: rgb("#94A3B8"), thickness: 1pt, dash: "dashed"),
+    radius: 4pt, inset: 12pt, width: 100%, height: 9cm,
+    align(center + horizon,
+      text(size: 9pt, fill: rgb("#94A3B8"), style: "italic")[
+        Espacio reservado para el diagrama de Fritzing (pendiente de insertar)
+      ],
+    ),
+  ),
+  caption: [Diagrama de conexión: ESP32, driver de motores, sensores ultrasónicos y batería.],
 )
-
-#nota[
-  *Detalles del cableado que no se ven en el esquema de pines.* (1) Los HC-SR04 se alimentan a
-  5 V —por debajo de eso el transductor pierde alcance—, pero su salida ECHO entrega 5 V, que
-  el ESP32 no tolera: por eso cada ECHO pasa por un divisor resistivo antes de entrar al GPIO.
-  Las líneas TRIG sí van directas, porque el sensor reconoce el pulso de 3.3 V como nivel alto.
-  (2) La batería de dos celdas 18650 (6.0–8.4 V) alimenta al LM2596, que fija el riel de 5 V
-  común para el ESP32, el driver y los sensores; los motores se alimentan de ese mismo riel a
-  través del TB6612FNG. (3) Todas las masas —batería, regulador, driver, sensores y ESP32—
-  están unidas a un único GND: sin esa referencia común las medidas de ECHO y del ADC de
-  batería se vuelven ruidosas o directamente incorrectas.
-]
 
 // ===========================================================================
 = Diseño de la Base de Datos
@@ -406,9 +365,10 @@ El esquema completo vive en `apps/api/db/schema.sql` y se aplica desde cero con
 #figure(
   table(
     columns: (auto, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
+    stroke: tablaStroke,
     inset: 7pt,
-    [*Tabla*], [*Qué guarda*],
+    fill: tablaFill,
+    filaEncabezado([Tabla], [Qué guarda]),
     [`usuarios`], [Cuentas que entran al dashboard: correo, hash bcrypt de la contraseña,
       nombre, rol (`admin` / `cliente`) y si está activa],
     [`dispositivos`], [Un robot físico. Su `id` de texto es a la vez el usuario MQTT
@@ -511,9 +471,10 @@ Todas las rutas de datos pasan por el middleware `requireAuth` y, cuando aplica,
 #figure(
   table(
     columns: (auto, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
+    stroke: tablaStroke,
     inset: 6.5pt,
-    [*Método y ruta*], [*Función*],
+    fill: tablaFill,
+    filaEncabezado([Método y ruta], [Función]),
     [`POST /api/auth/signup` · `/auth/login`], [Registro e inicio de sesión; devuelven un JWT],
     [`POST /api/ingesta`], [Inserción de lotes de lecturas vía REST, autenticada con el
       token del robot],
@@ -850,9 +811,10 @@ hardware puede medir de verdad*, sin inventar campos "por si acaso".
 #figure(
   table(
     columns: (1fr, 1fr),
-    stroke: 0.5pt + rgb("#E7E2DD"),
+    stroke: tablaStroke,
     inset: 7pt,
-    [*Problema*], [*Solución adoptada*],
+    fill: tablaFill,
+    filaEncabezado([Problema], [Solución adoptada]),
     [El robot no tiene encoders ni GPS: no se puede calcular su posición de forma fiable.],
     [Se eliminó del esquema toda columna de pose (`pos_x_cm`, `pos_y_cm`, `orientacion_deg`)
       en vez de simularla; el estado de movimiento se deduce del PWM real de los motores.],
