@@ -39,14 +39,22 @@ export const FILAS = 10;
 export const ALTO_FILA = 40;
 export const ALTO_FILA_MIN = 36;
 export const MARGEN = 16;
-/** Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. */
-export const ANCHO_GRILLA = 1024;
+/**
+ * Por debajo de esto la grilla colapsa a una columna y no se puede reordenar. 640 (no 1024):
+ * un Fold 6 desplegado mide ~714-830px de ancho CSS, cuadrado y no una tira de móvil normal, así
+ * que con el umbral viejo caía en la grilla de una columna y las tarjetas (pensadas para ~375 px)
+ * salían estiradas a lo ancho. Por debajo de 640 no cabe ni una columna de la grilla editable.
+ */
+export const ANCHO_GRILLA = 640;
 /**
  * Ancho del cajón de widgets del modo edición. El cajón va AL LADO del tablero, nunca encima:
  * tapar las tarjetas mientras se colocan es peor que estrecharlas. Lo que se encoge es el ancho
  * de columna, no la disposición: las cajas siguen en las mismas celdas y al salir vuelven.
  */
 export const ANCHO_LATERAL = 340;
+/** Por debajo de esto (fila entera) el cajón se encoge para dejarle sitio a la grilla: a lo
+ *  ancho de un Fold desplegado, ANCHO_LATERAL fijo no dejaría casi nada para el tablero. */
+export const ANCHO_LATERAL_MIN = 220;
 /**
  * Tamaño al que se dibuja la miniatura antes de escalarla, y el ancho de su caja en el cajón.
  * `caja` sale de repartir el ancho del cajón en DOS columnas: en una sola, siete widgets no

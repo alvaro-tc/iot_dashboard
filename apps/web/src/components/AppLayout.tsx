@@ -2,8 +2,9 @@
 // barra de navegación inferior en móvil.
 //
 //   ≥1280 px  sidebar fija + barra superior + grilla de 2 columnas
-//   768–1279  sidebar en iconos, grilla de 2 columnas
-//   <768      sin sidebar, nav inferior de 5 iconos, una columna
+//   640–1279  sidebar en iconos, grilla de 2 columnas (variante `plegado`: aquí cae ya un
+//             Fold desplegado, ~714-830px y cuadrado, no una tira de móvil)
+//   <640      sin sidebar, nav inferior de 5 iconos, una columna
 //   <400      (Fold plegado) etiquetas más pequeñas y paddings estrechos (variante `xs`)
 import { useState } from 'react';
 import {
@@ -71,10 +72,13 @@ export function AppLayout() {
   const enMovil = enlaces.filter((l) => l.movil).slice(0, 5);
 
   return (
-    <div className={`min-h-screen transition-[padding] duration-150 ${abierta ? 'md:pl-[220px]' : 'md:pl-[76px]'}`}>
-      {/* ---- Sidebar (≥768 px): estrecha en iconos, se despliega con los nombres ---- */}
+    <div
+      className={`min-h-screen transition-[padding] duration-150 ${abierta ? 'plegado:pl-[220px]' : 'plegado:pl-[76px]'}`}
+    >
+      {/* ---- Sidebar (≥640 px, un Fold desplegado incluido): estrecha en iconos, se despliega
+          con los nombres ---- */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 hidden flex-col gap-2 bg-barra py-5 transition-[width] duration-150 md:flex ${
+        className={`fixed inset-y-0 left-0 z-30 hidden flex-col gap-2 bg-barra py-5 transition-[width] duration-150 plegado:flex ${
           abierta ? 'w-[220px] items-stretch px-3' : 'w-[76px] items-center'
         }`}
       >
@@ -142,14 +146,14 @@ export function AppLayout() {
       <BarraSuperior />
 
       {/* pb en móvil: deja sitio a la barra de navegación inferior */}
-      <main className="mx-auto w-full max-w-[1500px] px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 md:pb-8">
+      <main className="mx-auto w-full max-w-[1500px] px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:px-6 plegado:pb-8">
         <Outlet />
       </main>
 
-      {/* ---- Navegación inferior (<768 px) ---- */}
+      {/* ---- Navegación inferior (<640 px) ---- */}
       <nav
         aria-label="Principal"
-        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-borde bg-tarjeta pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 flex border-t border-borde bg-tarjeta pb-[env(safe-area-inset-bottom)] plegado:hidden"
       >
         {enMovil.map(({ to, texto, Icono, end }) => (
           <NavLink

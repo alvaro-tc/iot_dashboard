@@ -32,6 +32,7 @@ import {
   ALTOS,
   ANCHO_GRILLA,
   ANCHO_LATERAL,
+  ANCHO_LATERAL_MIN,
   ANCHOS,
   BARRAS_N,
   BARRAS_POR_DEFECTO,
@@ -421,6 +422,9 @@ export function Panel() {
   // bucle (cierra edición → la grilla crece → vuelve a caber → abre edición → ...).
   const { ref: filaRef, caja: fila } = useCajaMedida<HTMLDivElement>();
   const puedeColocar = fila.ancho >= ANCHO_GRILLA;
+  // En un Fold desplegado la fila entera apenas pasa de ANCHO_GRILLA: el cajón fijo (340px) no
+  // dejaría casi nada para el tablero. Se encoge con la fila, nunca por debajo de lo legible.
+  const anchoLateral = Math.min(ANCHO_LATERAL, Math.max(ANCHO_LATERAL_MIN, fila.ancho * 0.4));
   const edicionActiva = editando && puedeColocar;
   /** Ajustar a la ventana solo donde la grilla es de verdad una grilla. */
   const ajustar = puedeColocar && layout.length > 0;
@@ -598,7 +602,7 @@ export function Panel() {
         </div>
 
         {edicionActiva && (
-          <aside aria-label="Widgets" className="cajon-widgets" style={{ width: ANCHO_LATERAL }}>
+          <aside aria-label="Widgets" className="cajon-widgets" style={{ width: anchoLateral }}>
             <h2 className="tarjeta-titulo mb-1 shrink-0">Widgets</h2>
             <div className="-mr-1 min-h-0 flex-1 overflow-y-auto pr-1">
               <CajonWidgets vista={tarjeta} onEditar={setWidget} />

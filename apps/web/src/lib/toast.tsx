@@ -23,7 +23,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       {/* En móvil, por encima de la barra de navegación inferior (56 px + área segura). */}
       <div
         aria-live="polite"
-        className="pointer-events-none fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 md:inset-x-auto md:right-4 md:bottom-4 md:max-w-sm"
+        className="pointer-events-none fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col gap-2 plegado:inset-x-auto plegado:right-4 plegado:bottom-4 plegado:max-w-sm"
       >
         {items.map((t) => (
           <div

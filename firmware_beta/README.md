@@ -9,7 +9,7 @@ chasis, hacen de lidar.
 MicroPython ejecuta `boot.py` y después `main.py`, siempre. `boot.py` mira la causa del reset:
 
 | Causa | Qué arranca |
-|---|---|
+|---|---|x
 | **Reset por software** (`Ctrl-D` en el REPL, `machine.soft_reset()`) | **modo lidar** (`main_beta.py`, bucle infinito: `main.py` no llega a correr) |
 | Encendido, botón EN, watchdog | **modo clásico** (`main.py`, el de ESP-NOW, intacto) |
 

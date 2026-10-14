@@ -36,6 +36,11 @@
   /* Pantalla plegada del Galaxy Fold y similares: ~340-390 px. Por debajo de `xs` caben
      etiquetas de una palabra y poco más, así que las variantes crecen a partir de aquí. */
   --breakpoint-xs: 25rem;
+  /* Pantalla DESPLEGADA de un Fold y similares: ~714-830px CSS, cuadrada en vez de una tira de
+     móvil. Por debajo de `md` (768) caía en el chrome de móvil normal (barra inferior, una sola
+     columna) pensado para ~375-430px, y todo salía estirado a lo ancho. Coincide con el umbral
+     de la grilla editable del panel (ANCHO_GRILLA en panel.tsx). */
+  --breakpoint-plegado: 40rem;
 }
 
 /* Tema oscuro: mismo naranja, fondos fríos y degradados desaturados. */
