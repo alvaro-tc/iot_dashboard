@@ -49,6 +49,9 @@ const sentido = (v: number | null) =>
  *  con un techo como 255 solo caen 200 y el borde (255). */
 const pasoEje = (techo: number) => [10, 20, 25, 50, 100, 150, 200].find((p) => techo / p <= 4) ?? 250;
 
+/** El mismo color del trazo, translúcido, para el relleno. Los colores del tema son hex. */
+const velo = (color: string, alfa = '2b') => (color.length === 7 ? color + alfa : color);
+
 export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcance: Alcance }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const chartRef = useRef<Chart | null>(null);
@@ -92,10 +95,19 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
             label: 'Velocidad',
             data: [],
             borderColor: adelante,
-            borderWidth: 2,
-            pointRadius: 0,
+            borderWidth: 1.5,
+            // El PWM es una orden que se mantiene hasta la siguiente muestra, no una rampa:
+            // en escalera se ve el ciclo de trabajo real en vez de diagonales inventadas.
+            stepped: 'after',
             spanGaps: false,
-            fill: 'origin',
+            // Relleno desde el cero y teñido por el lado: la banda dice de un golpe cuánto
+            // empuja la rueda y hacia dónde, sin leer el eje.
+            fill: { target: 'origin', above: velo(adelante), below: velo(atras) },
+            // Solo la última muestra lleva punto: es "aquí está el robot ahora".
+            pointRadius: (ctx) => (ctx.dataIndex === ctx.dataset.data.length - 1 ? 3 : 0),
+            pointBorderWidth: 0,
+            pointBackgroundColor: (ctx) =>
+              ((ctx.dataset.data[ctx.dataIndex] as Punto | undefined)?.y ?? 0) < 0 ? atras : adelante,
             // Un color por tramo según su signo: retroceder se ve sin leer el eje.
             segment: {
               borderColor: (ctx) => ((ctx.p0.parsed.y ?? 0) < 0 ? atras : adelante),
@@ -125,9 +137,27 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
             },
           },
           // El cero no es una línea más de la rejilla: es la frontera entre adelante y atrás.
+          // Lleva rótulo porque el eje va sin signo y, si no, no se sabe qué mitad es cuál.
           annotation: {
             annotations: {
-              cero: { type: 'line', yMin: 0, yMax: 0, borderColor: colores.tintaSuave, borderWidth: 1 },
+              cero: {
+                type: 'line',
+                yMin: 0,
+                yMax: 0,
+                borderColor: colores.tintaSuave,
+                borderWidth: 1.5,
+                label: {
+                  display: true,
+                  content: '↑ adelante   ↓ atrás',
+                  position: 'start',
+                  // Pegado bajo la línea del cero: encima tapaba el trazo más reciente.
+                  yAdjust: 8,
+                  color: colores.tintaSuave,
+                  backgroundColor: 'transparent',
+                  font: { size: 9 },
+                  padding: 2,
+                },
+              },
             },
           },
         },
@@ -142,26 +172,36 @@ export function TarjetaActividadMotor({ motor, alcance }: { motor: Motor; alcanc
               maxRotation: 0,
               minRotation: 0,
               autoSkipPadding: 20,
+              // La ventana en vivo son minutos: con hora:minuto salían cinco rótulos iguales.
               callback: (v) =>
                 new Date(Number(v)).toLocaleString(
                   'es',
                   alcance === 'total'
                     ? { day: '2-digit', month: 'short' }
-                    : { hour: '2-digit', minute: '2-digit' },
+                    : alcance === 'hoy'
+                      ? { hour: '2-digit', minute: '2-digit' }
+                      : { minute: '2-digit', second: '2-digit' },
                 ),
             },
           },
           y: {
             min: -techo,
             max: techo,
-            grid: { color: colores.borde },
+            // Sin marcas de tick: la referencia que manda es el cero, y los tirantes de la
+            // rejilla solo añadían ruido en un widget de esta altura.
+            grid: { color: colores.borde, drawTicks: false },
             border: { display: false },
-            // Sin signo en el eje: el signo lo dice el lado del cero, y "-180" repetido ensucia.
-            ticks: {
-              color: colores.tintaSuave,
-              stepSize: pasoEje(techo),
-              callback: (v) => String(Math.abs(Number(v))),
+            // Ticks puestos a mano y simétricos: con min/max en ±255 Chart.js repartía el eje
+            // en quintos (51, 153, 255) y la rejilla no decía nada. Así caen en múltiplos
+            // redondos del paso y el cero siempre está.
+            afterBuildTicks: (eje) => {
+              const paso = pasoEje(techo);
+              const valores = [0];
+              for (let v = paso; v <= techo; v += paso) valores.unshift(-v), valores.push(v);
+              eje.ticks = valores.sort((a, b) => a - b).map((value) => ({ value }));
             },
+            // Sin signo en el eje: el signo lo dice el lado del cero, y "-180" repetido ensucia.
+            ticks: { color: colores.tintaSuave, callback: (v) => String(Math.abs(Number(v))) },
           },
         },
       },
