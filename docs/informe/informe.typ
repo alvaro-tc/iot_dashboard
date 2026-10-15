@@ -382,72 +382,7 @@ sin depender de una capa externa.
 
 #figura(
   titulo: [Diagrama entidad-relación del esquema (`apps/api/db/schema.sql`).],
-  canvas(length: 1cm, {
-    import draw: *
-    let entidad(pos, w, h, titulo, campos, color: suave) = {
-      let (x, y) = pos
-      rect((x, y), (x + w, y + h), fill: white, stroke: 1pt + tinta, radius: 2pt)
-      rect((x, y + h - 0.58), (x + w, y + h), fill: color, stroke: 1pt + tinta, radius: 2pt)
-      content((x + w / 2, y + h - 0.29), text(size: 7.6pt, weight: "bold", titulo))
-      for (i, c) in campos.enumerate() {
-        content((x + 0.18, y + h - 1 - i * 0.4), anchor: "west", text(size: 6.1pt, c))
-      }
-    }
-    let rel(a, b, et, punteada: false) = {
-      let trazo = if punteada {
-        (paint: rgb("#94A3B8"), thickness: 0.9pt, dash: "dashed")
-      } else {
-        (paint: rgb("#475569"), thickness: 0.9pt)
-      }
-      line(a, b, stroke: trazo)
-      content(
-        ((a.at(0) + b.at(0)) / 2, (a.at(1) + b.at(1)) / 2 + 0.22),
-        text(size: 5.6pt, fill: rgb("#475569"), et),
-      )
-    }
-    // Variante con codo: para una relación que si fuera recta cruzaría por encima de otra
-    // entidad (dispositivos → lecturas, que si no rodea preferencias_usuario y sesiones
-    // pasaría justo por dentro de sus cajas).
-    let relCodo(pts, etq, pos-etq) = {
-      line(..pts, stroke: (paint: rgb("#475569"), thickness: 0.9pt))
-      content(pos-etq, text(size: 5.6pt, fill: rgb("#475569"), etq))
-    }
-
-    // Columna izquierda: cuenta y preferencias.
-    entidad((0, 9.3), 4.3, 2.3, "usuarios",
-      ("id PK", "correo UK", "rol", "lidar_habilitado"))
-    entidad((0, 6.5), 4.3, 1.9, "preferencias_usuario", color: rgb("#E2E8F0"),
-      ("usuario_id PK/FK", "datos (tema, panel) JSONB"))
-
-    // Centro: el robot y lo que hace.
-    entidad((5.1, 8.9), 4.6, 2.7, "dispositivos",
-      ("id PK (= usuario MQTT)", "usuario_id FK", "token_hash", "en_linea · ultimo_contacto"))
-    entidad((5.1, 5.6), 4.6, 2.1, "sesiones",
-      ("id PK", "dispositivo_id FK", "finalizada_en (NULL=activa)"))
-
-    // Derecha: modo lidar (configuración apunta a la sala activa).
-    entidad((10.9, 10.1), 5, 1.9, "configuracion_dispositivo", color: rgb("#FDE8D7"),
-      ("dispositivo_id PK/FK", "velocidad_base · angulos_sensores", "sala_activa_id FK (opcional)"))
-    entidad((10.9, 6.9), 5, 2.3, "salas", color: rgb("#FDE8D7"),
-      ("id PK", "dispositivo_id FK", "forma · vertices", "ancho/alto estimado_cm · real_cm"))
-    entidad((10.9, 3.9), 5, 2.1, "mapas", color: rgb("#FDE8D7"),
-      ("sala_id PK/FK", "rejilla (base64) · cols · filas", "obstaculos · cobertura"))
-
-    // Abajo: telemetría cruda, la que más filas acumula.
-    entidad((0, 0), 10.5, 2.5, "lecturas",
-      ("id PK", "dispositivo_id FK · sesion_id FK", "distancia_izquierda/central/derecha_cm (NULL=sin eco)", "movimiento_izquierda/derecha (-255..255)"))
-
-    rel((4.3, 7.45), (5.1, 7.45), "1 — 1")
-    rel((2.15, 9.3), (2.15, 8.4), "1 — 1")
-    rel((9.7, 9.9), (10.9, 10.9), "1 — 1")
-    rel((9.7, 8.9), (10.9, 8.0), "1 — 0..*")
-    rel((13.4, 10.1), (13.4, 9.2), "0..1 — 1", punteada: true)
-    rel((13.4, 6.9), (13.4, 6.0), "1 — 0..1")
-    rel((7.4, 8.9), (7.4, 7.7), "1 — 0..*")
-    // Codo para no atravesar preferencias_usuario ni sesiones de camino a lecturas.
-    relCodo(((5.1, 8.9), (4.9, 6.3), (3, 2.5)), "1 — 0..*", (4.5, 6.9))
-    rel((7.4, 5.6), (7.4, 2.5), "1 — 0..*")
-  }),
+  image("assets/diagrama-er.png", width: 100%),
 )
 
 === `usuarios`
@@ -615,10 +550,7 @@ el robot, solo dejarlo sin habitación asignada.
 
 == Seguridad (control de acceso a los datos)
 
-El esquema no usa *Row Level Security* de PostgreSQL porque el acceso se decide en la API, no
-en consultas directas del cliente a la base: el dashboard nunca habla con PostgreSQL
-directamente, solo con la API REST y el WebSocket, que son los únicos procesos con
-credenciales de base de datos. La política de acceso equivalente a RLS se aplica en dos capas:
+El control de acceso a los datos se aplica en dos capas:
 
 1. *Autenticación*: todo endpoint de datos exige un JWT válido (`requireAuth`), que se
   revalida contra la tabla `usuarios` en cada petición —no solo contra la firma del token—
@@ -635,6 +567,25 @@ una vez, al crear el robot desde el dashboard.
 
 // ===========================================================================
 = Integración mediante API REST
+
+== Conexión y envío de datos por MQTT
+
+El robot no le habla directamente a la API: publica su telemetría por MQTT (puerto 8883,
+TLS) en el topic `roomba/{ROBOT_ID}/telemetria`, autenticado con su propio usuario y
+contraseña en Mosquitto (el mismo token que se guarda como hash bcrypt en
+`dispositivos.token_hash`). La API corre como cliente suscrito a ese broker —el puente
+MQTT (`apps/api/src/mqtt/bridge.ts`)— y recibe ahí cada mensaje que publica cualquier robot,
+sin tener que ir a buscarlo.
+
+Se eligió MQTT en vez de solo REST para este tramo por cuatro motivos: *latencia* (la
+conexión persistente evita el coste de abrir una conexión nueva en cada envío a 2 Hz),
+*configuración sin sondeo* (el robot se suscribe a `config` y recibe el cambio apenas se
+publica, sin tener que preguntar), *detección de caída gratuita* (el *Last Will* que
+Mosquitto publica si el robot se desconecta sin avisar, sin esperar un *timeout*) y
+*configuración retenida* (un robot que arranca, o un dashboard que se abre, ven el estado
+vigente sin pedirlo). El puente MQTT valida cada mensaje con el mismo esquema Zod
+(`telemetriaSchema`) que usa la ruta `POST /api/ingesta`, así que un robot puede publicar
+por MQTT o por HTTP y terminar en la misma función `procesarTelemetria`.
 
 == Uso de la API REST
 
@@ -848,6 +799,11 @@ await pool.query(
 );
 ```
 
+#figure(
+  image("assets/cap-login.jpg", width: 85%),
+  caption: [Pantalla de inicio de sesión en producción (`iot-dashboard.tumype.com`).],
+)
+
 == Gestión de sesiones
 
 La sesión de usuario se mantiene con un *JWT firmado* (`jsonwebtoken`, `HS256`), con
@@ -858,6 +814,12 @@ desactiva una cuenta o le cambia el rol, el acceso se corta en la siguiente peti
 esperar a que el token expire. La misma verificación protege el *handshake* de Socket.IO, y
 `disconnectUser(id)` desconecta activamente los sockets abiertos de un usuario que deja de
 tener acceso.
+
+#figure(
+  image("assets/cap-admin-usuarios.jpg", width: 85%),
+  caption: [Vista de administración de usuarios (`/admin/usuarios`), con rol, estado de la
+    cuenta y permiso de mapa lidar por usuario.],
+)
 
 == Seguridad de acceso
 
@@ -892,40 +854,41 @@ Las gráficas se construyen con *Chart.js*, registrado una sola vez en `lib/char
 evitar el error clásico de "controller no registrado" al añadir un gráfico nuevo. El panel
 combina varios tipos de visualización sobre la misma telemetría:
 
-- *Radar* de los tres sensores de distancia, posicionado según los ángulos reales de montaje
-  (`angulos_sensores`), coloreado con los umbrales `DIST_EVASION_CM = 15 cm` (rojo) y
-  `DIST_PRECAUCION_CM = 30 cm` (ámbar).
-- *Serie de líneas* de distancia en el tiempo, con zoom y *pan* (`chartjs-plugin-zoom`).
+- *Tarjetas y gráfica de distancia en vivo*, con los tres sensores (izquierdo, central,
+  derecho) posicionados según los ángulos reales de montaje (`angulos_sensores`) y
+  coloreados con los umbrales `DIST_EVASION_CM = 15 cm` (rojo) y `DIST_PRECAUCION_CM = 30 cm`
+  (ámbar).
+- *Contadores de actividad*: tiempo de uso total y tiempo en marcha de cada motor.
 - *Gauge* de batería.
-- *Barra de cadencia* de conectividad (última lectura frente a la cadencia esperada).
+- *Serie de líneas* de actividad del motor, con el signo indicando el sentido de marcha
+  (adelante / atrás), con zoom y *pan* (`chartjs-plugin-zoom`).
 
 Las siguientes son capturas reales del panel en producción (`https://iot-dashboard.tumype.com/`,
-cuenta `alvaro@demo.com`). Como en ese momento no hay ningún robot ni simulador publicando,
+cuenta de demostración). Como en ese momento no hay ningún robot ni simulador publicando,
 las gráficas aparecen vacías — es el estado real que vería cualquier visitante del enlace, no
 uno maquillado con datos de relleno:
 
 #figura(
-  titulo: [Radar de sensores, con los tres sectores (izquierdo, central, derecho) según los
-    ángulos reales de `angulos_sensores`.],
-  image("assets/cap-panel-grafico-radar.png", width: 100%),
+  titulo: [Tarjetas de distancia en vivo (izquierdo, central, derecho) y gráfica de
+    distancias en vivo con sus tres sectores. Sin lecturas porque el robot está fuera de
+    línea en el momento de la captura.],
+  image("assets/cap-panel-distancias-vivo.png", width: 100%),
 )
 
 #figura(
-  titulo: [Historial de distancias: serie de líneas de los últimos 5 minutos, con las líneas
-    de umbral `DIST_EVASION_CM = 15` y `DIST_PRECAUCION_CM = 30`. Sin datos porque el robot
-    está fuera de línea en el momento de la captura.],
-  image("assets/cap-panel-grafico-historial.png", width: 100%),
+  titulo: [Contadores de actividad: tiempo de uso total y tiempo en marcha de cada motor.],
+  image("assets/cap-panel-tiempo-uso.png", width: 100%),
 )
 
 #figura(
   titulo: [Gauge de batería del robot activo.],
-  image("assets/cap-panel-grafico-bateria.png", width: 100%),
+  image("assets/cap-panel-bateria-gauge.png", width: 100%),
 )
 
 #figura(
-  titulo: [Tarjeta de conectividad: mensajes por segundo, última lectura y cadencia
-    esperada.],
-  image("assets/cap-panel-grafico-conectividad.png", width: 100%),
+  titulo: [Actividad del motor izquierdo: velocidad en vivo con el signo indicando el
+    sentido de marcha (adelante / atrás).],
+  image("assets/cap-panel-actividad-motor.png", width: 100%),
 )
 
 == Actualización en tiempo real
@@ -1067,20 +1030,6 @@ Secciones citadas a lo largo de este informe —
   caption: [Pantalla de registro de una cuenta nueva.],
 )
 #figure(
-  image("../../_ppt_assets/cap-panel-completo.png", width: 100%),
-  caption: [Panel en tiempo real de un robot: radar de sensores, series de distancia,
-    batería, actividad de motores y conectividad.],
-)
-#figure(
-  image("../../_ppt_assets/cap-historial-completo.png", width: 100%),
-  caption: [Historial de telemetría con filtros de rango y agregación.],
-)
-#figure(
-  image("../../_ppt_assets/cap-sesiones-completo.png", width: 100%),
-  caption: [Listado de sesiones de limpieza con su resumen (duración, batería consumida,
-    obstáculos cercanos por sensor).],
-)
-#figure(
   image("../../_ppt_assets/cap-robots.png", width: 85%),
   caption: [Gestión de robots del usuario: alta, token MQTT y estado de conexión.],
 )
@@ -1092,26 +1041,21 @@ Secciones citadas a lo largo de este informe —
 == Capturas del despliegue en producción
 
 Las siguientes capturas se tomaron directamente del despliegue en vivo
-(`https://iot-dashboard.tumype.com/`), entrando con las cuentas de demostración de
-`docs/cuentas-de-prueba.md` (`alvaro@demo.com` y `admin@demo.com`). Como en el VPS no hay un
-robot físico ni el simulador publicando en ese momento, los robots aparecen *fuera de línea*
-con batería y telemetría de la última sesión registrada — el estado real que vería cualquier
-visitante del enlace, sin maquillar.
+(`https://iot-dashboard.tumype.com/`), entrando con la cuenta de demostración precargada en el
+navegador (`demo@gmail.com`, rol cliente, robot `Roomba V2`). Como en el VPS no hay un robot
+físico ni un simulador publicando contra esta cuenta, el robot aparece *fuera de línea* y sin
+telemetría registrada — el estado real que vería cualquier visitante del enlace, sin maquillar.
 
 #figure(
   image("assets/cap-panel-radar.jpg", width: 85%),
-  caption: [Panel en producción, cuenta `alvaro@demo.com`: radar de los tres sensores e
-    historial de distancias de `Roomba Sala`.],
+  caption: [Panel en producción, cuenta de demostración: tarjetas de tiempo de uso y marcha de
+    cada motor, gauge de batería y gráfica en vivo de actividad del motor izquierdo, todo en
+    cero por falta de telemetría.],
 )
 #figure(
   image("assets/cap-panel-estado-bateria.jpg", width: 85%),
-  caption: [Panel en producción (continuación al desplazar): estado del robot, PWM de cada
-    rueda y gauge de batería.],
-)
-#figure(
-  image("assets/cap-panel-conectividad-sesiones.jpg", width: 85%),
-  caption: [Panel en producción (continuación): tarjeta de conectividad (mensajes/s,
-    cadencia esperada) y listado de sesiones recientes.],
+  caption: [Panel en producción (continuación al desplazar): tarjetas de última lectura por
+    sensor y el widget «Distancias en vivo» de los tres sensores, vacíos.],
 )
 #figure(
   image("assets/cap-panel-oscuro.jpg", width: 85%),
@@ -1119,28 +1063,18 @@ visitante del enlace, sin maquillar.
 )
 #figure(
   image("assets/cap-historial-live.jpg", width: 85%),
-  caption: [Historial en producción: distancia mínima por hora y marcha/parada, agregados en
-    PostgreSQL por `v_lecturas_por_hora`.],
+  caption: [Historial en producción: «Sin datos en este rango» al no haber lecturas agregadas
+    en `v_lecturas_por_hora` para un robot que nunca ha publicado.],
 )
 #figure(
   image("assets/cap-sesiones-live.jpg", width: 85%),
-  caption: [Sesiones de limpieza reales del robot de demostración, con su resumen de
-    duración, batería consumida y PWM medio.],
+  caption: [Sesiones de limpieza en producción: «Sin sesiones todavía», a la espera de que el
+    robot empiece a publicar telemetría.],
 )
 #figure(
   image("assets/cap-robots-live.jpg", width: 85%),
-  caption: [Robots de la cuenta `alvaro@demo.com` en producción: `roomba-sala` y
-    `roomba-cocina`, ambos fuera de línea por falta de hardware/simulador conectado.],
-)
-#figure(
-  image("assets/cap-admin-dashboard.jpg", width: 85%),
-  caption: [Panel de administración en producción (`admin@demo.com`): 2 clientes, 3 robots,
-    0 en línea y 0 sesiones activas en el momento de la captura.],
-)
-#figure(
-  image("assets/cap-admin-usuarios.jpg", width: 85%),
-  caption: [Gestión de usuarios en producción: las tres cuentas de demostración con su rol,
-    número de robots y sesiones.],
+  caption: [Robots de la cuenta de demostración en producción: `Roomba V2`
+    (`roomba-8h605e14`), fuera de línea, último contacto «nunca» y 0 sesiones.],
 )
 
 // ===========================================================================
