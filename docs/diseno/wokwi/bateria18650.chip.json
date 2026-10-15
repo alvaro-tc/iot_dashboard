@@ -1,0 +1,11 @@
+{
+  "name": "2x18650",
+  "author": "Robot ESP32",
+  "pins": [
+    "BAT+",
+    "BAT-",
+    "MID",
+    "NC"
+  ],
+  "controls": []
+}

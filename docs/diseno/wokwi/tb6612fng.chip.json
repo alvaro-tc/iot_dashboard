@@ -1,0 +1,23 @@
+{
+  "name": "TB6612FNG",
+  "author": "Robot ESP32",
+  "pins": [
+    "AO1",
+    "AO2",
+    "BO1",
+    "BO2",
+    "VM",
+    "GND1",
+    "GND2",
+    "GND3",
+    "VCC",
+    "STBY",
+    "PWMB",
+    "BIN1",
+    "AIN2",
+    "AIN1",
+    "PWMA",
+    "BIN2"
+  ],
+  "controls": []
+}

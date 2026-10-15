@@ -1,0 +1,11 @@
+{
+  "name": "LM2596 5V",
+  "author": "Robot ESP32",
+  "pins": [
+    "IN+",
+    "IN-",
+    "OUT-",
+    "OUT+"
+  ],
+  "controls": []
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Motor TT",
+  "author": "Robot ESP32",
+  "pins": [
+    "NC1",
+    "NC2",
+    "M2",
+    "M1"
+  ],
+  "controls": []
+}
