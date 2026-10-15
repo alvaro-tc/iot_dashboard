@@ -154,6 +154,7 @@ detección de obstáculos.
 
 - Diseñar el esquema de conexiones de los componentes electrónicos en Fritzing, documentando
   el cableado real del robot con las piezas disponibles.
+- Incorporar también el diagrama editable de conexiones del robot en Wokwi.
 - Diseñar el esquema de base de datos (tablas, relaciones y reglas de integridad) que respalde
   la telemetría del robot y el historial de sus sesiones de limpieza.
 - Implementar WebSockets para que la telemetría del robot se vea en el dashboard en tiempo
@@ -177,14 +178,26 @@ de autenticación propio y el dashboard en tiempo real con su historial. A esto 
 que ofrecen los sensores ultrasónicos fijos.
 
 También se logra la *visualización de datos en tiempo real* desde el dashboard, la
-*implementación de usuarios con dos roles* —administrador y usuario— y una página *desplegada
-en un VPS*, accesible desde cualquier dispositivo con conexión a internet.
+*implementación de usuarios con dos roles* —administrador (`admin`) y usuario cliente
+(`cliente`)— y una página *desplegada en un VPS*, accesible desde cualquier dispositivo con
+conexión a internet.
 
 Queda *fuera* del alcance de esta etapa —y así se deja documentado en el propio código, sin
 simular hardware que no existe—: el sistema de succión y los cepillos, sensores adicionales
 como el de polvo, la estimación de posición por odometría (el robot no tiene encoders), otros
 sensores adicionales (giroscopio, bumper, caída) y cualquier estrategia de cobertura de
 limpieza.
+
+=== Precisiones sobre la implementación actual
+
+La evasión autónoma y el mapeo descritos en el alcance corresponden a una versión beta
+separada: el firmware clásico recibe órdenes manuales por ESP-NOW, mientras que la beta
+recibe órdenes por MQTT e incorpora navegación autónoma. El modo denominado «LIDAR» en el
+código no utiliza un sensor láser; emplea los tres sensores ultrasónicos del robot durante el
+giro del chasis. Tampoco se implementan modelos de *machine learning*: ese punto permanece
+como objetivo planteado, no como funcionalidad alcanzada. La beta estima el movimiento con
+calibración de motores y encaja los barridos con la geometría de la sala; sin encoders, la
+posición y el mapa son estimaciones y no mediciones directas.
 
 // ===========================================================================
 = Diseño del Sistema IoT
@@ -214,7 +227,7 @@ guardarse en PostgreSQL en lotes de un segundo.
     caja((0, 3.6), 4.2, 2, [*ESP32* \ MicroPython \ 3×US · ADC · PWM], color: suave)
     caja(
       (0, 0.4), 4.2, 1.4,
-      [*Mando ESP-NOW* \ órdenes manuales \ #text(size: 6pt, style: "italic", fill: rgb("#64748B"))[solo pruebas iniciales]],
+      [*Mando ESP-NOW* \ órdenes manuales \ firmware clásico],
       color: rgb("#E7EBEF"), dashed: true,
     )
     line((2.1, 1.8), (2.1, 3.6), mark: (end: "stealth"), stroke: (paint: gris, thickness: 1pt, dash: "dashed"))
@@ -276,10 +289,10 @@ El flujo tiene cuatro tramos:
         la conexión],
       [*HTTP/REST* \ (JSON)], [Dashboard ↔ API],
         [Lo que no es tiempo real: iniciar sesión, ver el historial y descargar el CSV],
-      text(weight: "bold", fill: plomo)[ESP-NOW \ #text(size: 6pt, style: "italic")[(solo pruebas)]],
-        text(fill: plomo)[Mando ↔ ESP32],
+      text(weight: "bold", fill: plomo)[ESP-NOW],
+        text(fill: plomo)[Mando ↔ ESP32 (modo clásico)],
         text(fill: plomo)[Órdenes manuales de reacción rápida, sin pasar por el Wi-Fi ni por el
-        backend; un prototipo inicial, no parte del flujo final],
+        backend. La versión beta recibe sus órdenes de movimiento por MQTT.],
     ),
     caption: [Protocolos de transporte usados en cada tramo del sistema.],
   )
@@ -323,15 +336,18 @@ El nodo físico es un *ESP32* con los siguientes componentes (pines reales de
 
 #figure(
   block(
-    stroke: (paint: rgb("#94A3B8"), thickness: 1pt, dash: "dashed"),
-    radius: 4pt, inset: 12pt, width: 100%, height: 9cm,
-    align(center + horizon,
-      text(size: 9pt, fill: rgb("#94A3B8"), style: "italic")[
-        Espacio reservado para el diagrama de Fritzing (pendiente de insertar)
-      ],
-    ),
+    stroke: 0.5pt + rgb("#E7E2DD"), inset: 10pt, radius: 4pt, width: 100%,
+    image("assets/diagrama-wokwi.png", width: 100%),
   ),
-  caption: [Diagrama de conexión: ESP32, driver de motores, sensores ultrasónicos y batería.],
+  caption: [Diagrama del circuito elaborado en Wokwi.],
+)
+
+#figure(
+  block(
+    stroke: 0.5pt + rgb("#E7E2DD"), inset: 10pt, radius: 4pt, width: 100%,
+    image("assets/diagrama-fritzing.png", width: 100%),
+  ),
+  caption: [Diagrama de conexiones del robot elaborado en Fritzing.],
 )
 
 // ===========================================================================
@@ -357,21 +373,22 @@ sin depender de una capa externa.
     fill: tablaFill,
     filaEncabezado([Tabla], [Qué guarda]),
     [`usuarios`], [Cuentas que entran al dashboard: correo, hash bcrypt de la contraseña,
-      nombre, rol (`admin` / `cliente`), si está activa y si tiene el permiso del modo lidar],
+      nombre, rol (`admin` / `cliente`), si está activa y si puede usar el modo beta de mapeo
+      (campo `lidar_habilitado`)],
     [`preferencias_usuario`], [1 a 1 con `usuarios`: tema e interfaz del panel (qué widgets,
       dónde y con qué ajustes) como JSONB opaco, para que la misma cuenta vea lo mismo en
       cualquier dispositivo],
     [`dispositivos`], [Un robot físico. Su `id` de texto es a la vez el usuario MQTT
-      (`roomba-sala`, …), con hash y cifrado del token, estado de conexión y versión de
-      firmware],
+      (`roomba-sala`, …), con el token protegido mediante hash bcrypt y cifrado recuperable,
+      estado de conexión y versión de firmware],
     [`configuracion_dispositivo`], [1 a 1 con `dispositivos`: PWM de crucero, ángulos y
       geometría de los sensores, calibración de movimiento y qué habitación está mapeando
-      ahora. Es lo único que el robot "obedece"],
-    [`salas`], [Una habitación de un robot en modo lidar: su polígono de paredes, el tamaño
-      estimado por el usuario y el real una vez mapeada, y las puertas (huecos que no son
-      salida)],
-    [`mapas`], [1 a 1 con `salas`: la rejilla de ocupación acumulada por el barrido láser,
-      sus obstáculos ya extraídos y cuánta superficie está cubierta],
+      ahora. El modo beta también recibe órdenes de movimiento por MQTT],
+    [`salas`], [Una habitación usada por el modo beta de mapeo ultrasónico: su polígono de
+      paredes, el tamaño de referencia indicado por el usuario y las dimensiones calculadas
+      al encajar el polígono mapeado, además de las puertas (huecos que no son salida)],
+    [`mapas`], [1 a 1 con `salas`: la rejilla de ocupación acumulada a partir de los barridos
+      ultrasónicos, sus obstáculos ya extraídos y cuánta superficie está cubierta],
     [`sesiones`], [Un ciclo de funcionamiento del robot: inicio, fin (`NULL` = activa),
       total de lecturas y batería al inicio/fin],
     [`lecturas`], [Telemetría: una fila por mensaje publicado por el ESP32 — distancia de
@@ -419,10 +436,10 @@ con hash y cifrado del token, estado de conexión y versión de firmware. Fila d
 
 === `configuracion_dispositivo`
 
-Relación 1 a 1 con `dispositivos` y la única tabla que el firmware *obedece*: todo lo
-demás es lo que el robot *reporta*. Guarda el PWM de crucero, ángulos y geometría de los
-sensores, calibración de movimiento y qué habitación está mapeando ahora
-(`sala_activa_id`, único enlace del robot hacia el modo lidar). Fila de ejemplo:
+Relación 1 a 1 con `dispositivos`. Guarda parámetros de configuración que consume el firmware,
+como el PWM de crucero, los ángulos y la geometría de los sensores, la calibración de
+movimiento y qué habitación está mapeando ahora (`sala_activa_id`). En el modo beta, las
+acciones de movimiento se reciben por MQTT. Fila de ejemplo:
 
 ```
 {dispositivo_id: "roomba-sala", velocidad_base: 180,
@@ -431,8 +448,9 @@ sensores, calibración de movimiento y qué habitación está mapeando ahora
 
 === `salas`
 
-Una habitación de un robot en modo lidar: su polígono de paredes, el tamaño estimado por
-el usuario y el real una vez mapeada, y las puertas (huecos que no son salida). Fila de
+Una habitación utilizada por el modo beta de mapeo ultrasónico (denominado «LIDAR» en el
+código): su polígono de paredes, el tamaño de referencia indicado por el usuario y las
+dimensiones derivadas del mapeo, además de las puertas (huecos que no son salida). Fila de
 ejemplo:
 
 ```
@@ -442,8 +460,9 @@ ejemplo:
 
 === `mapas`
 
-Relación 1 a 1 con `salas`: la rejilla de ocupación acumulada por el barrido láser, sus
-obstáculos ya extraídos y cuánta superficie está cubierta. Se guarda aparte de `salas`
+Relación 1 a 1 con `salas`: la rejilla de ocupación acumulada a partir de barridos
+ultrasónicos, sus obstáculos ya extraídos y cuánta superficie está cubierta. Se guarda aparte
+de `salas`
 porque pesa mucho más que el resto de la fila. Fila de ejemplo:
 
 ```
@@ -561,9 +580,10 @@ El control de acceso a los datos se aplica en dos capas:
   sea `admin`. La misma comprobación (`puedeVer`) se aplica al unirse a una sala de Socket.IO,
   para que la telemetría de un robot no llegue a un navegador que no es su propietario.
 
-Las contraseñas de usuario se guardan con *bcrypt* (factor de coste 10) y nunca en claro; el
-token MQTT de cada robot también se guarda como hash bcrypt, y solo se muestra en texto claro
-una vez, al crear el robot desde el dashboard.
+Las contraseñas de usuario se guardan con *bcrypt* (factor de coste 10) y nunca en claro. El
+token del robot se almacena como hash bcrypt para validarlo y, además, cifrado con AES-256-GCM
+para que su propietario pueda recuperarlo desde el panel; el broker Mosquitto mantiene su
+propio hash PBKDF2-SHA512 de la credencial.
 
 // ===========================================================================
 = Integración mediante API REST
@@ -661,7 +681,10 @@ límite máximo de 5000 filas por respuesta.
 Todas las rutas comparten un error handler centralizado (`http.ts`): los errores de validación
 Zod se traducen a `400` con un mensaje por campo, los errores de negocio se lanzan como
 `HttpError(status, mensaje)` con el código HTTP correcto (`401` sin token o credenciales
-incorrectas, `403` cuenta desactivada o ruta de administrador, `404` recurso inexistente,
+incorrectas o sesión expirada; las rutas protegidas también devuelven `401` si la cuenta está
+desactivada. El inicio de sesión de una cuenta desactivada y las rutas reservadas a
+administradores devuelven `403`,
+`404` recurso inexistente,
 `409` correo duplicado) y cualquier error no previsto cae en un `500` genérico que se registra
 en el log del servidor sin filtrar detalles internos al cliente.
 
@@ -688,8 +711,8 @@ siguiente ciclo.
 
 `firmware/conexion_wifi.py` conecta el ESP32 en modo estación (`network.STA_IF`) con un
 *timeout* explícito de 10 segundos; si no logra conectar, lanza `OSError` y el programa
-principal lo captura sin detenerse: el robot sigue esquivando obstáculos y aceptando órdenes
-por ESP-NOW aunque no tenga Wi-Fi ni MQTT.
+principal lo captura sin detenerse. El receptor ESP-NOW del modo clásico permanece operativo
+y el robot puede seguir recibiendo órdenes manuales aunque no tenga Wi-Fi ni MQTT.
 
 ```python
 def conectar_wifi():
@@ -707,7 +730,7 @@ def conectar_wifi():
 
 == Lectura de datos (mínimo tres variables)
 
-El bucle principal (`main.py`) actualiza *un sensor ultrasónico por iteración* (ronda
+El firmware clásico (`main.py`) actualiza *un sensor ultrasónico por iteración* (ronda
 rotativa entre izquierdo, central y derecho cada ≥15 ms) para no bloquear el resto del
 programa con los hasta 12 ms que puede tardar un `HC-SR04` en responder, y lee la batería en
 la misma cadencia:
@@ -741,9 +764,10 @@ datos = {
 mqtt.publicar_telemetria(datos)
 ```
 
-Las claves del diccionario son las mismas que valida el backend y las mismas que terminan
-como columnas en PostgreSQL: el esquema de la base *es* el JSON del robot, sin traducir
-nombres por el camino.
+El backend valida las claves del diccionario y transforma los campos anidados en columnas
+relacionales: por ejemplo, `distancias_cm.izquierdo` se almacena en
+`distancia_izquierda_cm`. Se conserva el significado y la unidad de cada magnitud, pero el
+esquema de PostgreSQL no es una copia literal del JSON.
 
 == Manejo de errores y reconexión
 
@@ -757,8 +781,9 @@ nombres por el camino.
   No bloquea el bucle: los sensores y motores siguen funcionando mientras tanto.
 3. *Degradación explícita*: si `umqtt.simple` no está instalado, o Wi-Fi no conecta, el error
   se captura en `main.py` y se imprime, pero el programa continúa. La prioridad en el bucle es
-  siempre: 1) órdenes ESP-NOW y seguridad, 2) sensores, 3) telemetría MQTT — en ese orden, así
-  que un fallo de red nunca compromete la evasión de obstáculos.
+  siempre: 1) órdenes ESP-NOW y seguridad, 2) sensores, 3) telemetría MQTT. En el modo clásico
+  un fallo de red no impide recibir órdenes ESP-NOW; la evasión autónoma corresponde al
+  firmware beta.
 
 ```python
 def intentar_reconectar(self):
@@ -777,6 +802,20 @@ def intentar_reconectar(self):
 Adicionalmente, `motores.py` aplica un *tiempo de parada de seguridad*
 (`TIEMPO_PARADA_MS = 250`): si no llega ninguna orden nueva en ese plazo, el robot detiene los
 motores, para no seguir avanzando a ciegas si pierde la comunicación con su mando.
+
+== Firmware beta: evasión y mapeo ultrasónico
+
+El modo beta, implementado en `firmware_beta/main_beta.py`, no usa el mando ESP-NOW: recibe
+órdenes desde el dashboard por MQTT. Durante la limpieza, `firmware_beta/navegacion.py` decide localmente
+cómo avanzar, girar o retroceder según las distancias de los tres HC-SR04; esta evasión no
+depende de que una orden de red llegue a tiempo.
+
+Para mapear una habitación, el robot gira sobre su chasis y publica por MQTT lotes de muestras
+con el tiempo transcurrido y las distancias medidas por cada sonar. Como no tiene encoders, el
+ángulo se estima con la calibración de grados por segundo. El backend encaja los barridos con
+la geometría de la sala y actualiza una rejilla de ocupación; por tanto, la posición y el mapa
+son estimaciones, no mediciones de un LIDAR láser ni de encoders. El nombre «LIDAR» se conserva
+como etiqueta del modo en el código, pero el sensor utilizado es ultrasónico.
 
 // ===========================================================================
 = Sistema de Autenticación
@@ -935,15 +974,16 @@ de error visible al usuario (vía `toast.tsx`) en vez de fallar en silencio.
 
 == Resultados obtenidos
 
-El sistema cubre de punta a punta los seis requisitos de evaluación: un nodo IoT con tres
+El sistema cubre de punta a punta los requisitos de evaluación: un nodo IoT con tres
 sensores y dos motores controlados por PWM, una base de datos relacional con reglas de
 integridad resueltas en el propio motor, inserción y lectura por API REST (tanto vía MQTT como
 vía HTTP directo), un script MicroPython que lee los sensores y envía los datos con
 reconexión automática, un sistema de autenticación propio con bcrypt + JWT, y un dashboard en
 React que visualiza la telemetría en tiempo real con gráficas de Chart.js y permite consultar
 el historial de sesiones. El diseño prioriza una latencia baja en el camino en vivo (emitir
-por WebSocket antes de tocar la base de datos) y una base de datos que *solo guarda lo que el
-hardware puede medir de verdad*, sin inventar campos "por si acaso".
+por WebSocket antes de tocar la base de datos) y distingue las mediciones del hardware de las
+estimaciones de movimiento y del mapa. La beta de evasión y mapeo ultrasónico se describe por
+separado; no implementa los modelos de *machine learning* planteados como objetivo.
 
 == Problemas y soluciones
 
@@ -954,9 +994,10 @@ hardware puede medir de verdad*, sin inventar campos "por si acaso".
     inset: 7pt,
     fill: tablaFill,
     filaEncabezado([Problema], [Solución adoptada]),
-    [El robot no tiene encoders ni GPS: no se puede calcular su posición de forma fiable.],
-    [Se eliminó del esquema toda columna de pose (`pos_x_cm`, `pos_y_cm`, `orientacion_deg`)
-      en vez de simularla; el estado de movimiento se deduce del PWM real de los motores.],
+    [El robot no tiene encoders ni GPS: no mide directamente su posición absoluta.],
+    [La telemetría no guarda una pose estimada como si fuera una medición. La beta calcula una
+      estimación aproximada con la calibración de motores y el encaje de los barridos con la
+      sala; el estado de las ruedas se deduce del PWM reportado.],
 
     [Guardar cada lectura inmediatamente en PostgreSQL añadía latencia al camino en vivo.],
     [Se invirtió el orden: emitir por WebSocket primero, y solo encolar la escritura en un
@@ -986,11 +1027,11 @@ hardware puede medir de verdad*, sin inventar campos "por si acaso".
 El proyecto deja tres lecciones de ingeniería aplicables más allá de este robot concreto:
 primero, que la *latencia percibida* de un sistema en tiempo real depende del orden en que
 se hacen las cosas, no solo de la velocidad de cada pieza por separado (emitir antes de
-persistir). Segundo, que un esquema de base de datos es más robusto cuando *se niega a
-guardar lo que no se puede medir* en vez de rellenar el hueco con una estimación poco
-fiable —la pose por odometría sin encoders siendo el ejemplo central—. Y tercero, que separar
-con claridad las identidades de un sistema (JWT de usuario del dashboard, token bcrypt del
-robot vía MQTT/HTTP) simplifica la seguridad más que intentar unificar todo bajo un único
+persistir). Segundo, que el sistema debe distinguir claramente las mediciones de los
+sensores de las estimaciones: la beta estima el movimiento sin encoders y corrige los barridos
+con la geometría de la sala, pero no presenta esa pose como una medición directa. Y tercero,
+que separar con claridad las identidades de un sistema (JWT de usuario del dashboard, token
+del robot para MQTT/HTTP) simplifica la seguridad más que intentar unificar todo bajo un único
 mecanismo de autenticación.
 
 // ===========================================================================
@@ -1014,10 +1055,20 @@ Secciones citadas a lo largo de este informe —
   `apps/api/src/ws.ts`, `apps/api/src/telemetria.ts`, `apps/api/src/auth.ts`.
 - Firmware MicroPython: `firmware/main.py`, `sensores.py`, `motores.py`,
   `comunicacion_mqtt.py`, `conexion_wifi.py`, `radio_espnow.py`, `configuracion.py`.
+- Firmware beta: `firmware_beta/main_beta.py`, `firmware_beta/navegacion.py`; lógica de mapeo en
+  `apps/api/src/lidar/` y `packages/shared/src/lidar.ts`.
 - Dashboard: `apps/web/src/pages/`, `apps/web/src/components/`, `apps/web/src/lib/`.
 - Geometría y simulación compartidas: `packages/shared/src/robot.ts`,
   `packages/shared/src/simulacion.ts`.
 - Infraestructura de despliegue (VPS sin Docker): `infra/`.
+
+== Diseño electrónico
+
+Los diagramas de Wokwi y Fritzing incluidos en la sección de componentes documentan por
+separado el circuito del robot. El proyecto editable de Wokwi se encuentra en
+`docs/diseno/wokwi/` y el archivo de Fritzing en `docs/diseno/Robot_Autonomo_ESP32.fzz`.
+El proyecto Wokwi documenta las conexiones; el firmware ejecutable del robot se mantiene en
+los directorios `firmware/` y `firmware_beta/`.
 
 == Capturas de pantalla
 
