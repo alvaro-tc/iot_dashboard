@@ -17,9 +17,9 @@ MQTT_TLS = True
 #   - el prefijo de sus topicos: roomba/{ROBOT_ID}/...
 # La ACL de Mosquitto solo le deja hablar bajo ese prefijo, asi que tiene que coincidir
 # exactamente con el id que muestra el dashboard al dar de alta el robot.
-ROBOT_ID = "roomba-obdpo50s"
+ROBOT_ID = "roomba-8h605el4"
 MQTT_USUARIO = ROBOT_ID
-MQTT_CLAVE = "HgdneKTOeaq9a_DwQ1GPTmSEFcU5TeKm"
+MQTT_CLAVE = "vG_uv8qzb0A8M4EVJWqZj_snUfqvenxG"
 MQTT_CLIENTE_ID = ROBOT_ID
 
 TOPIC_TELEMETRIA = "roomba/{0}/telemetria".format(ROBOT_ID).encode()
