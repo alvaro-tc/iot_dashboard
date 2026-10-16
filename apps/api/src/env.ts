@@ -24,6 +24,9 @@ const schema = z.object({
   PORT: z.coerce.number().default(4000),
   // Una sesión sin telemetría durante este tiempo se cierra sola.
   SESION_INACTIVA_MS: z.coerce.number().default(120_000),
+  // Un robot sin publicar nada durante este tiempo se muestra fuera de línea (publica cada
+  // 500 ms). Más bajo, cualquier tirón de Wi-Fi hace parpadear el badge.
+  PRESENCIA_SIN_SENAL_MS: z.coerce.number().default(4_000),
 });
 
 const parsed = schema.safeParse(process.env);

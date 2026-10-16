@@ -14,7 +14,7 @@ import { PREFIJO, parseTopico } from '@iot/shared';
 import mqtt from 'mqtt';
 import { z } from 'zod';
 import { env } from '../env.ts';
-import { marcarPresencia } from '../presencia.ts';
+import { latido, marcarPresencia } from '../presencia.ts';
 import { recibirEstadoFirmware, recibirLote } from '../lidar/mapeo.ts';
 import { procesarTelemetria, telemetriaSchema } from '../telemetria.ts';
 
@@ -123,11 +123,15 @@ export function startBridge(): mqtt.MqttClient {
   });
   c.on('error', (e) => console.error('[mqtt]', e.message));
 
-  c.on('message', (topic, buf) => {
+  c.on('message', (topic, buf, packet) => {
     const parsed = parseTopico(topic);
     if (!parsed) return;
     const { dispositivoId, sufijo } = parsed;
-    if (sufijo === 'config') return; // lo publica el backend
+    if (sufijo === 'config' || sufijo === 'comando') return; // los publica el backend
+
+    // Prueba de vida para el vigía de presencia. `estado` no cuenta (lo publica el broker por
+    // él con el Last Will) ni nada retenido, que puede ser de hace horas.
+    if (sufijo !== 'estado' && !packet.retain) latido(dispositivoId);
 
     let json: unknown;
     try {

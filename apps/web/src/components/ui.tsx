@@ -104,9 +104,9 @@ export function Badge({ tono = 'neutro', children }: { tono?: 'neutro' | 'vivo' 
 export function BadgeVivo({ enVivo, texto }: { enVivo: boolean; texto?: string }) {
   return (
     <span
-      className={`badge backdrop-blur ${enVivo ? 'bg-evasion/20 text-white' : 'bg-black/55 text-white'}`}
+      className={`badge backdrop-blur ${enVivo ? 'bg-libre/20 text-white' : 'bg-black/55 text-white'}`}
     >
-      <span className={`size-2 rounded-full ${enVivo ? 'bg-evasion punto-vivo' : 'bg-white/70'}`} />
+      <span className={`size-2 rounded-full ${enVivo ? 'bg-libre punto-vivo' : 'bg-slate-400'}`} />
       {texto ?? (enVivo ? 'En vivo' : 'Desconectado')}
     </span>
   );

@@ -25,7 +25,9 @@ class ClienteMQTT:
             port=cfg.MQTT_PUERTO,
             user=cfg.MQTT_USUARIO or None,
             password=cfg.MQTT_CLAVE or None,
-            keepalive=30,
+            # 10 s: el broker da al robot por caido a los ~15 s (1.5x) y publica el Last Will.
+            # No hace falta ping(): la telemetria sale cada 500 ms y ya cuenta como actividad.
+            keepalive=10,
             ssl=cfg.MQTT_TLS
         )
 

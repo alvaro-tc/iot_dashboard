@@ -89,7 +89,7 @@ function arrancarRobot({ id, token }: Robot): void {
     username: id,
     password: token,
     clientId: `sim-${id}-${process.pid}`,
-    keepalive: 30,
+    keepalive: 10, // igual que el firmware
     reconnectPeriod: 2000,
     // Last Will: si el simulador muere de golpe, Mosquitto avisa por él.
     will: {

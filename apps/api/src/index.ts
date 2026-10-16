@@ -7,6 +7,7 @@ import { errorHandler } from './http.ts';
 import { syncBroker } from './mqtt/broker-credentials.ts';
 import { startBridge } from './mqtt/bridge.ts';
 import { arrancarPersistencia, detenerPersistencia, reenviarPendientes } from './persistencia.ts';
+import { arrancarVigia } from './presencia.ts';
 import { republicarConfiguraciones } from './configuracion.ts';
 import { adminRouter } from './routes/admin.ts';
 import { authRouter } from './routes/auth.ts';
@@ -107,6 +108,7 @@ startBridge();
 setTimeout(() => void republicarConfiguraciones(), 2_000);
 arrancarPersistencia();
 arrancarVolcadoPeriodico();
+arrancarVigia();
 arrancarBarridoInactivas(env.SESION_INACTIVA_MS, (id) => {
   console.log(`[sesiones] cerrada por inactividad: ${id}`);
   void emitirCambioRobot(id, ['sesiones', 'resumen', 'dispositivos', 'admin-resumen']);

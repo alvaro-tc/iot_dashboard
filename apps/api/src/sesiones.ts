@@ -1,7 +1,7 @@
 // Sesiones de funcionamiento: una por ciclo de actividad del robot.
 //
-// Se abren con la primera lectura que llega y se cierran cuando el robot se desconecta o
-// deja de publicar (presencia.ts y el barrido de inactivas). Los contadores se llevan en
+// Se abren con la primera lectura que llega y se cierran solo con el barrido de inactivas:
+// la presencia (presencia.ts) no las toca, así un corte corto de Wi-Fi no parte la sesión. Los contadores se llevan en
 // memoria y solo se escriben en Postgres al abrir, al cerrar y en un volcado periódico, así
 // el camino en vivo no espera nunca a la base de datos.
 import { pool } from './db.ts';
