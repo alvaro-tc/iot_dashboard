@@ -18,7 +18,7 @@ cargarEnv({ path: path.join(RAIZ, '.env'), quiet: true });
 
 const PASO_MS = 50; // bucle de control, igual que el firmware
 const TELEMETRIA_MS = 500; // igual que INTERVALO_MQTT_MS en firmware/configuracion.py
-// Los mismos que firmware_beta/main_beta.py: el backend ve exactamente el mismo caudal.
+// Los mismos que firmware_beta/main.py: el backend ve exactamente el mismo caudal.
 const MUESTRA_LIDAR_MS = 50;
 const MUESTRAS_POR_LOTE = 20;
 const VERSION_FIRMWARE = '1.2.0-sim';
@@ -218,7 +218,7 @@ function arrancarRobot({ id, token }: Robot): void {
     const d = sim.distancias();
     lidar.muestras.push([ahora - lidar.inicio, d.izquierdo, d.central, d.derecho]);
     if (lidar.muestras.length >= MUESTRAS_POR_LOTE) publicarLote(false);
-    // El mismo corte que firmware_beta/main_beta.py: el avance de calibracion se aborta antes
+    // El mismo corte que firmware_beta/main.py: el avance de calibracion se aborta antes
     // de empotrarse, y la pendiente ya esta medida en el tramo recorrido. Sin esto el simulador
     // se queda empujando la pared y las muestras planas del final estropean el ajuste.
     if (lidar.accion === 'calibrar_avance' && d.central !== null && d.central <= 25) pararLidar();

@@ -1,4 +1,7 @@
-# main_beta.py  --  modo lidar: sonar giratorio y limpieza autonoma
+# main.py (firmware_beta)  --  modo lidar: sonar giratorio y limpieza autonoma
+#
+# Firmware completo e independiente: se flashea esta carpeta entera y arranca siempre en modo
+# lidar, sin reinicios por software. Para volver al clasico se flashea la carpeta firmware/.
 #
 # QUE HACE DISTINTO AL FIRMWARE CLASICO
 #   - No hay mando ESP-NOW. Las ordenes llegan por MQTT, del dashboard (topico `comando`).
@@ -14,8 +17,8 @@
 # solo sitio (packages/shared/src/lidar.ts), se pueden corregir sin reflashear el robot y se
 # prueban en el PC. El firmware solo obedece y mide.
 #
-# Reutiliza los modulos del firmware clasico (motores, sensores, wifi, mqtt): los pines, el
-# divisor de la bateria y la calibracion del ADC son los mismos y no hay dos verdades.
+# motores, sensores, wifi, mqtt y configuracion son copias de los de firmware/: si cambias
+# pines, divisor de bateria o credenciales en uno, cambialo tambien en el otro.
 
 import json
 import time
@@ -314,3 +317,6 @@ def main():
                     modo.mqtt.desconectar()
 
         time.sleep_ms(1)
+
+
+main()

@@ -4,35 +4,22 @@ Modo nuevo del robot: **sonar giratorio** para reconocer la habitación y **limp
 sin mando ESP-NOW y sin un solo componente nuevo. Los tres HC-SR04 de siempre, girando con el
 chasis, hacen de lidar.
 
-## Cómo se entra y se sale
-
-MicroPython ejecuta `boot.py` y después `main.py`, siempre. `boot.py` mira la causa del reset:
-
-| Causa | Qué arranca |
-|---|---|x
-| **Reset por software** (`Ctrl-D` en el REPL, `machine.soft_reset()`) | **modo lidar** (`main_beta.py`, bucle infinito: `main.py` no llega a correr) |
-| Encendido, botón EN, watchdog | **modo clásico** (`main.py`, el de ESP-NOW, intacto) |
-
-No se escribe nada en la flash: la causa del reset ya lleva la información. **Quitar y poner la
-corriente siempre devuelve al modo antiguo**, que es la vía de escape si el modo lidar se cuelga.
-
-```sh
-mpremote connect COM5          # y pulsar Ctrl-D  -> modo lidar
-# desenchufar y enchufar       # -> modo clásico
-```
-
 ## Desplegar
 
-Los archivos de este directorio van **junto a** los del firmware clásico, en la raíz del
-sistema de archivos del ESP32: el modo lidar reutiliza `motores.py`, `sensores.py`,
-`conexion_wifi.py`, `comunicacion_mqtt.py` y `configuracion.py` para no tener dos verdades
-sobre los pines, el divisor de la batería o la calibración del ADC.
+Esta carpeta es un firmware **completo e independiente**: arranca siempre en modo lidar, sin
+`boot.py` ni resets por software. El firmware clásico (ESP-NOW) vive aparte en `firmware/`.
+Cambiar de modo = flashear la otra carpeta (las dos tienen su `main.py`, que se sobrescribe).
 
 ```sh
-mpremote connect COM5 fs cp ../firmware/*.py :      # clásico (si no está ya)
-mpremote connect COM5 fs cp *.py :                  # boot.py, main_beta.py, navegacion.py
-mpremote connect COM5 reset                         # arranca en clásico
+mpremote connect COM5 fs cp firmware_beta/*.py : + reset   # -> modo lidar
+mpremote connect COM5 fs cp firmware/*.py : + reset        # -> modo clásico
 ```
+
+Si en el ESP32 quedó un `boot.py` de la versión anterior, bórralo una vez:
+`mpremote connect COM5 fs rm :boot.py`.
+
+`motores.py`, `sensores.py`, `conexion_wifi.py`, `comunicacion_mqtt.py` y `configuracion.py`
+son copias de las de `firmware/`: si cambias pines, divisor o credenciales, cámbialos en las dos.
 
 Requiere `umqtt.simple` en el dispositivo, igual que el clásico:
 `mpremote connect COM5 mip install umqtt.simple`.
@@ -76,7 +63,7 @@ el golpe.
 `navegacion.py` corre en el PC (solo es la máquina de estados):
 
 ```sh
-PYTHONPATH=../firmware python navegacion.py
+python navegacion.py
 ```
 
 Y el simulador habla este mismo protocolo, así que el mapeo del dashboard se puede probar

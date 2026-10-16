@@ -182,7 +182,7 @@ node packages/shared/src/robot.check.ts # umbrales, batería, movimiento y simul
 node packages/shared/src/lidar.check.ts # encaje de la pose, rejilla, formas y calibración
 node apps/web/src/lib/metricas.check.ts # lo que cuentan los widgets de uso
 pnpm --filter @iot/shared entrenar      # reentrena el modelo del sonar y mide si gana
-PYTHONPATH=firmware python firmware_beta/navegacion.py  # la evasión del modo lidar, en el PC
+python firmware_beta/navegacion.py  # la evasión del modo lidar, en el PC
 ```
 
 Los autocomprobantes cubren lo que puede romperse en silencio: que avanzar, girar y estar
