@@ -96,6 +96,9 @@ VOLTAJE_MAX_BATERIA = 8.4
 
 # ---------- Control ----------
 PWM_MAXIMO = 255
+# PWM por debajo del cual el motor zumba pero no arranca. Calibrar: subir hasta que
+# la rueda gire sola en el suelo. Cualquier velocidad != 0 se reescala a [MINIMO, MAXIMO].
+PWM_MINIMO = 90
 FRECUENCIA_PWM = 20000
 
 # Detener las ruedas si se pierde la comunicación.

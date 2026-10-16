@@ -61,8 +61,15 @@ class ControlMotores:
             pin1.value(0)
             pin2.value(0)
 
+        # Zona muerta: se reescala 1..MAXIMO a MINIMO..MAXIMO para que una velocidad baja
+        # siga moviendo la rueda. El valor devuelto (telemetria) sigue siendo el logico.
+        if velocidad:
+            efectivo = cfg.PWM_MINIMO + abs(velocidad) * (cfg.PWM_MAXIMO - cfg.PWM_MINIMO) / cfg.PWM_MAXIMO
+        else:
+            efectivo = 0
+
         ciclo = int(
-            abs(velocidad) * 65535 / cfg.PWM_MAXIMO
+            efectivo * 65535 / cfg.PWM_MAXIMO
         )
 
         # API PWM de MicroPython para ESP32 actual.
